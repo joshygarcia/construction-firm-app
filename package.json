@@ -5,7 +5,7 @@
   "private": true,
   "main": "electron/dist/main.js",
   "updater": {
-    "owner": "YOUR_GITHUB_USERNAME",
+    "owner": "joshygarcia",
     "repo": "construction-firm-app",
     "assetName": "Control-Central-windows-x64.zip"
   },
