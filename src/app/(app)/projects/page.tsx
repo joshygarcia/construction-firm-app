@@ -29,15 +29,12 @@ export default function ProjectsPage() {
       </header>
       <div className="flex flex-1 flex-col items-center px-4 py-10 md:px-6">
         <div className="w-full max-w-5xl space-y-8">
-          <div className="space-y-2">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Selecciona un proyecto
-            </p>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
-              Portfolio de obra
+          <div className="space-y-1.5">
+            <h1 className="font-heading text-[28px] font-semibold tracking-tight md:text-[32px]">
+              Tus proyectos
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Elige un proyecto para acceder a su panel, movimientos, presupuesto y reportes.
+            <p className="text-[15px] text-muted-foreground">
+              Abre un proyecto para ver su panel, o crea uno nuevo.
             </p>
           </div>
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

@@ -10,40 +10,40 @@ export function QuickEntryImpactCard({
   preview: QuickEntryPreview;
 }) {
   return (
-    <Card className="border-border/50 bg-muted/15 shadow-none">
+    <Card className="border-dashed bg-muted/20 shadow-none">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Impacto previsto</CardTitle>
+        <CardTitle className="text-base">Cómo afecta</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="space-y-1">
           <p className="font-medium text-foreground">{preview.projectName}</p>
           <p className="text-muted-foreground">
-            {preview.monthKey ? `Periodo ${formatMonthKey(preview.monthKey)}` : "Actualiza presupuesto"}
+            {preview.monthKey ? formatMonthKey(preview.monthKey) : "Vista previa del movimiento"}
           </p>
         </div>
 
         <dl className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-            <dt className="text-muted-foreground">Caja proyectada</dt>
-            <dd className="mt-1 font-mono text-base text-foreground">
+          <div className="rounded-xl border border-border/60 bg-card p-3">
+            <dt className="text-muted-foreground">Caja después</dt>
+            <dd className="mt-1 text-base font-semibold tabular-nums text-foreground">
               {formatCurrency(preview.projectedCashAvailable)}
             </dd>
           </div>
-          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-            <dt className="text-muted-foreground">Delta inmediato</dt>
-            <dd className="mt-1 font-mono text-base text-foreground">
+          <div className="rounded-xl border border-border/60 bg-card p-3">
+            <dt className="text-muted-foreground">Cambio en caja</dt>
+            <dd className="mt-1 text-base font-semibold tabular-nums text-foreground">
               {formatCurrency(preview.cashDelta)}
             </dd>
           </div>
-          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-            <dt className="text-muted-foreground">Presupuesto total</dt>
-            <dd className="mt-1 font-mono text-base text-foreground">
+          <div className="rounded-xl border border-border/60 bg-card p-3">
+            <dt className="text-muted-foreground">Presupuesto</dt>
+            <dd className="mt-1 text-base font-semibold tabular-nums text-foreground">
               {formatCurrency(preview.projectedBudgetTotal)}
             </dd>
           </div>
-          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-            <dt className="text-muted-foreground">Restante del proyecto</dt>
-            <dd className="mt-1 font-mono text-base text-foreground">
+          <div className="rounded-xl border border-border/60 bg-card p-3">
+            <dt className="text-muted-foreground">Restante</dt>
+            <dd className="mt-1 text-base font-semibold tabular-nums text-foreground">
               {formatCurrency(preview.projectedBudgetRemaining)}
             </dd>
           </div>

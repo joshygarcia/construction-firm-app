@@ -11,8 +11,12 @@ import {
   CreditCardIcon,
   FileTextIcon,
   LineChartIcon,
+  PlusIcon,
   Settings2Icon,
 } from "lucide-react";
+
+import { buttonVariants } from "@/components/ui/button-variants";
+import { cn } from "@/lib/utils";
 
 import {
   Sidebar,
@@ -59,28 +63,33 @@ export function ProjectShell({
   return (
     <SidebarProvider defaultOpen>
       <Sidebar variant="inset">
-        <SidebarHeader className="gap-4 px-4 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-sidebar-primary/90 to-sidebar-primary/60">
-              <span className="font-heading text-sm font-bold text-sidebar-primary-foreground">
-                CC
-              </span>
+        <SidebarHeader className="gap-3 px-3 py-4">
+          <div className="flex items-center gap-3 px-1">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <span className="font-heading text-sm font-bold">CC</span>
             </div>
             <div className="min-w-0">
-              <p className="font-heading text-[15px] font-semibold text-sidebar-foreground truncate">
+              <p className="truncate font-heading text-[15px] font-semibold text-sidebar-foreground">
                 {projectName}
               </p>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-sidebar-foreground/40">
-                Control Central
-              </p>
+              <Link
+                href="/projects"
+                className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeftIcon className="size-3" />
+                Cambiar proyecto
+              </Link>
             </div>
           </div>
           <Link
-            href="/projects"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            href={`/projects/${projectId}/registrar`}
+            className={cn(
+              buttonVariants({ size: "default" }),
+              "w-full justify-center gap-2 rounded-xl shadow-sm",
+            )}
           >
-            <ArrowLeftIcon className="size-3.5" />
-            Cambiar proyecto
+            <PlusIcon className="size-4" />
+            Registrar
           </Link>
         </SidebarHeader>
         <SidebarSeparator />
@@ -99,9 +108,9 @@ export function ProjectShell({
                         render={
                           <Link
                             href={item.href}
-                            className={isActive ? "border-l-2 border-sidebar-primary !rounded-l-none" : ""}
+                            className={cn("rounded-xl", isActive && "font-medium")}
                           >
-                            <item.icon data-icon="inline-start" className={isActive ? "text-sidebar-primary" : ""} />
+                            <item.icon data-icon="inline-start" className={isActive ? "text-primary" : "text-muted-foreground"} />
                             <span>{item.label}</span>
                           </Link>
                         }
@@ -123,20 +132,15 @@ export function ProjectShell({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="overflow-hidden">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border/50 bg-background/85 px-4 py-3 backdrop-blur-md md:px-6">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md md:px-6">
+          <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger />
-            <div className="h-4 w-px bg-border/70" />
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              Contabilidad ledger-first
-            </p>
+            <div className="h-4 w-px bg-border" />
+            <p className="truncate text-sm font-medium text-foreground">{projectName}</p>
           </div>
-          <div className="hidden items-center gap-2 md:flex">
-            <div className="h-1.5 w-1.5 rounded-full bg-copper/70" />
-            <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-              es-DO / DOP
-            </span>
-          </div>
+          <span className="hidden rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground md:inline">
+            RD$ · DOP
+          </span>
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
       </SidebarInset>

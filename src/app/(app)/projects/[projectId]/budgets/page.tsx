@@ -109,6 +109,7 @@ export default async function ProjectBudgetsPage({
             defaultProjectId={projectId}
             projectSummaries={reference.projectSummaries}
             projects={reference.projects.filter((p) => p.id === projectId)}
+            showImpact={false}
             subcategories={reference.subcategories}
             suggestionOptions={reference.suggestionOptions}
           />

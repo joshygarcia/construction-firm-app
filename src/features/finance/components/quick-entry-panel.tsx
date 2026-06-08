@@ -92,6 +92,8 @@ type QuickEntryPanelProps = {
   defaultProjectId?: string;
   defaultMode?: Mode;
   availableModes?: Mode[];
+  /** Muestra el panel lateral "Cómo afecta". Por defecto true. */
+  showImpact?: boolean;
 };
 
 /** ¿El método de pago seleccionado es "tarjeta"? */
@@ -362,7 +364,7 @@ function ExpenseTab(
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+    <div className={(props.showImpact ?? true) ? "grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]" : "mx-auto w-full max-w-2xl"}>
       <form className="flex flex-col gap-5" onSubmit={onSubmit}>
         <FieldGroup>
         {props.projects.length > 1 && (
@@ -579,7 +581,7 @@ function ExpenseTab(
           submitLabel="Guardar gasto"
         />
       </form>
-      <QuickEntryImpactCard preview={preview} />
+      {(props.showImpact ?? true) ? <QuickEntryImpactCard preview={preview} /> : null}
     </div>
   );
 }
@@ -683,7 +685,7 @@ function IncomeTab(
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+    <div className={(props.showImpact ?? true) ? "grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]" : "mx-auto w-full max-w-2xl"}>
       <form className="flex flex-col gap-5" onSubmit={onSubmit}>
         <FieldGroup>
         {props.projects.length > 1 && (
@@ -768,7 +770,7 @@ function IncomeTab(
           submitLabel="Guardar ingreso"
         />
       </form>
-      <QuickEntryImpactCard preview={preview} />
+      {(props.showImpact ?? true) ? <QuickEntryImpactCard preview={preview} /> : null}
     </div>
   );
 }
@@ -889,7 +891,7 @@ function ContractorPaymentTab(
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+    <div className={(props.showImpact ?? true) ? "grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]" : "mx-auto w-full max-w-2xl"}>
       <form className="flex flex-col gap-5" onSubmit={onSubmit}>
         <FieldGroup>
         {props.projects.length > 1 && (
@@ -1008,7 +1010,7 @@ function ContractorPaymentTab(
           submitLabel="Guardar pago"
         />
       </form>
-      <QuickEntryImpactCard preview={preview} />
+      {(props.showImpact ?? true) ? <QuickEntryImpactCard preview={preview} /> : null}
     </div>
   );
 }
@@ -1154,7 +1156,7 @@ function BudgetLineTab(
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+    <div className={(props.showImpact ?? true) ? "grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]" : "mx-auto w-full max-w-2xl"}>
       <form className="flex flex-col gap-5" onSubmit={onSubmit}>
         <FieldGroup>
         {props.projects.length > 1 && (
@@ -1293,7 +1295,7 @@ function BudgetLineTab(
           submitLabel="Guardar linea"
         />
       </form>
-      <QuickEntryImpactCard preview={preview} />
+      {(props.showImpact ?? true) ? <QuickEntryImpactCard preview={preview} /> : null}
     </div>
   );
 }
@@ -1410,10 +1412,10 @@ export function QuickEntryPanel(props: QuickEntryPanelProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 font-heading text-xl tracking-tight">
           <WalletCardsIcon className="text-primary" />
-          Quick Entry
+          Registrar
         </CardTitle>
         <CardDescription>
-          Registra un movimiento una sola vez y deja que el ledger distribuya el impacto.
+          Anota el movimiento una sola vez; el resto se actualiza solo.
         </CardDescription>
       </CardHeader>
       <CardContent>

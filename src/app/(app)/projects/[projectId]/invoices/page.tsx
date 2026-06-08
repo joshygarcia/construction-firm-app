@@ -41,7 +41,7 @@ export default async function ProjectInvoicesPage({
     return null;
   }
 
-  const { invoices, project } = overview;
+  const { invoices } = overview;
 
   const sortedInvoices = [...invoices].sort(
     (a, b) => b.createdAt.localeCompare(a.createdAt),
@@ -50,9 +50,9 @@ export default async function ProjectInvoicesPage({
   return (
     <>
       <PageHeader
-        eyebrow="Facturas"
-        title={`Facturación · ${project.name}`}
-        description="Crea, gestiona y da seguimiento a las facturas del proyecto."
+        eyebrow="Facturas y recibos"
+        title="Facturas"
+        description="Crea facturas para el cliente, márcalas como cobradas e imprime el PDF."
       />
       <div className="grid gap-6 px-4 py-6 md:px-6 xl:grid-cols-[0.95fr_1.05fr]">
         {/* Invoice creation form */}

@@ -55,9 +55,9 @@ export default async function ProjectReportsPage({
   return (
     <>
       <PageHeader
-        description="Reportes generados desde los registros estructurados del ledger."
+        description="Presupuesto vs gasto real, flujo de caja y control mensual del proyecto."
         eyebrow="Reportes"
-        title={`Reportes · ${snapshot.projectOverview.project.name}`}
+        title="Reportes"
         actions={<ExportButtons projectId={projectId} type="report" />}
       />
       <div className="flex flex-col gap-6 px-4 py-6 md:px-6">

@@ -1,10 +1,12 @@
-import { QuickEntryPanel } from "@/features/finance/components/quick-entry-panel";
+import Link from "next/link";
+import { PlusIcon } from "lucide-react";
+
 import { TransactionsTable } from "@/features/finance/components/transactions-table";
 import { TransactionsCalendar } from "@/components/projects/transactions-calendar";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getTransactionsSnapshot, getReferenceData } from "@/features/finance/store";
+import { getTransactionsSnapshot } from "@/features/finance/store";
 import { cn } from "@/lib/utils";
 
 function getParam(value: string | string[] | undefined) {
@@ -32,63 +34,63 @@ export default async function ProjectTransactionsPage({
   }
 
   const months = [...new Set(snapshot.transactions.map((item) => item.transactionDate.slice(0, 7)))];
-  const reference = getReferenceData();
+  const activeMonth = getParam(search.month);
 
   return (
     <>
       <PageHeader
-        description="Registra movimientos y consulta el ledger del proyecto."
+        description="Todo lo que entra y sale del proyecto, en un solo lugar."
         eyebrow="Movimientos"
-        title="Entrada rápida + Ledger"
+        title="Movimientos"
+        actions={
+          <Link
+            href={`/projects/${projectId}/registrar`}
+            className={cn(buttonVariants({ size: "default" }), "gap-2 rounded-xl")}
+          >
+            <PlusIcon className="size-4" />
+            Registrar
+          </Link>
+        }
       />
-      <div className="flex flex-col gap-6 px-4 py-6 md:px-6">
-        <div className="flex flex-wrap gap-2">
-          {months.map((month) => (
-            <a
+      <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
+        {months.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/projects/${projectId}/transactions`}
               className={cn(
-                buttonVariants({
-                  variant: month === getParam(search.month) ? "secondary" : "outline",
-                  size: "sm",
-                }),
+                buttonVariants({ variant: !activeMonth ? "secondary" : "outline", size: "sm" }),
+                "rounded-full",
               )}
-              key={month}
-              href={`/projects/${projectId}/transactions?month=${month}`}
             >
-              {month}
-            </a>
-          ))}
-        </div>
+              Todos
+            </Link>
+            {months.map((month) => (
+              <Link
+                key={month}
+                href={`/projects/${projectId}/transactions?month=${month}`}
+                className={cn(
+                  buttonVariants({ variant: month === activeMonth ? "secondary" : "outline", size: "sm" }),
+                  "rounded-full",
+                )}
+              >
+                {month}
+              </Link>
+            ))}
+          </div>
+        )}
 
-        <QuickEntryPanel
-          availableModes={["expense", "income", "contractor_payment"]}
-          budgetLines={reference.budgetLines}
-          budgetRows={reference.budgetRows}
-          budgetVersions={reference.budgetVersions}
-          cards={reference.cards}
-          categories={reference.categories}
-          contractorBalances={reference.contractorBalances}
-          contractors={reference.contractors}
-          contracts={reference.contracts}
-          defaultMode="expense"
-          defaultProjectId={projectId}
-          projectSummaries={reference.projectSummaries}
-          projects={reference.projects.filter((p) => p.id === projectId)}
-          subcategories={reference.subcategories}
-          suggestionOptions={reference.suggestionOptions}
-        />
-
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+        <Card>
           <CardHeader>
-            <CardTitle>Ledger filtrado</CardTitle>
+            <CardTitle>Historial</CardTitle>
           </CardHeader>
           <CardContent>
             <TransactionsTable transactions={snapshot.transactions} />
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+        <Card>
           <CardHeader>
-            <CardTitle>Calendario de movimientos</CardTitle>
+            <CardTitle>Calendario</CardTitle>
           </CardHeader>
           <CardContent>
             <TransactionsCalendar

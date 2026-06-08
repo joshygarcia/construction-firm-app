@@ -16,21 +16,16 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 border-b border-border/50 px-4 py-6 md:px-6 lg:flex-row lg:items-end lg:justify-between",
+        "flex flex-col gap-4 px-4 py-7 md:px-8 lg:flex-row lg:items-center lg:justify-between",
         className,
       )}
     >
       <div className="max-w-3xl">
-        <div className="flex items-center gap-2">
-          <div className="h-[3px] w-4 rounded-full bg-copper/60" />
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-copper">
-            {eyebrow}
-          </p>
-        </div>
-        <h1 className="mt-1.5 font-heading text-3xl font-semibold tracking-tight text-foreground">
+        <p className="text-[13px] font-medium text-copper">{eyebrow}</p>
+        <h1 className="mt-1 font-heading text-[28px] font-semibold tracking-tight text-foreground md:text-[32px]">
           {title}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground md:text-[15px]">
+        <p className="mt-1.5 text-[15px] leading-6 text-muted-foreground">
           {description}
         </p>
       </div>

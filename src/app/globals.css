@@ -51,48 +51,55 @@
 }
 
 :root {
-  /* Concrete & Copper — Light */
-  --background: oklch(0.965 0.006 70);
-  --foreground: oklch(0.20 0.02 55);
-  --card: oklch(0.985 0.004 70);
-  --card-foreground: oklch(0.20 0.02 55);
-  --popover: oklch(0.985 0.004 70);
-  --popover-foreground: oklch(0.20 0.02 55);
-  --primary: oklch(0.50 0.11 55);
-  --primary-foreground: oklch(0.98 0.005 70);
-  --secondary: oklch(0.91 0.012 70);
-  --secondary-foreground: oklch(0.25 0.02 55);
-  --muted: oklch(0.935 0.008 70);
-  --muted-foreground: oklch(0.48 0.02 55);
-  --accent: oklch(0.92 0.018 65);
-  --accent-foreground: oklch(0.20 0.02 55);
-  --destructive: oklch(0.58 0.19 25);
-  --border: oklch(0.88 0.012 70);
-  --input: oklch(0.88 0.012 70);
-  --ring: oklch(0.60 0.12 55);
+  /* Clear & Warm — Light (rediseño simple y amable) */
+  --background: oklch(0.985 0.004 75);
+  --foreground: oklch(0.25 0.02 60);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.25 0.02 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.25 0.02 60);
+  --primary: oklch(0.62 0.15 50);
+  --primary-foreground: oklch(0.99 0.005 70);
+  --secondary: oklch(0.955 0.008 75);
+  --secondary-foreground: oklch(0.30 0.02 60);
+  --muted: oklch(0.965 0.006 75);
+  --muted-foreground: oklch(0.55 0.02 60);
+  --accent: oklch(0.95 0.02 60);
+  --accent-foreground: oklch(0.30 0.04 50);
+  --destructive: oklch(0.58 0.20 25);
+  --border: oklch(0.92 0.008 75);
+  --input: oklch(0.90 0.01 75);
+  --ring: oklch(0.62 0.15 50);
 
   /* Copper accent tokens */
-  --copper: oklch(0.65 0.14 55);
-  --copper-muted: oklch(0.65 0.14 55 / 0.15);
+  --copper: oklch(0.64 0.15 50);
+  --copper-muted: oklch(0.64 0.15 50 / 0.12);
 
-  /* Charts — earthy construction palette */
-  --chart-1: oklch(0.55 0.12 55);
-  --chart-2: oklch(0.62 0.10 155);
-  --chart-3: oklch(0.72 0.14 75);
-  --chart-4: oklch(0.58 0.14 35);
-  --chart-5: oklch(0.50 0.06 260);
+  /* Money semantics */
+  --positive: oklch(0.60 0.13 155);
+  --negative: oklch(0.58 0.20 25);
 
-  --radius: 0.625rem;
+  /* Charts — friendly warm palette */
+  --chart-1: oklch(0.64 0.15 50);
+  --chart-2: oklch(0.62 0.12 155);
+  --chart-3: oklch(0.74 0.13 75);
+  --chart-4: oklch(0.60 0.14 35);
+  --chart-5: oklch(0.58 0.10 250);
 
-  /* Sidebar — deep charcoal with warmth */
-  --sidebar: oklch(0.16 0.015 55);
-  --sidebar-foreground: oklch(0.90 0.008 70);
-  --sidebar-primary: oklch(0.72 0.14 65);
-  --sidebar-primary-foreground: oklch(0.13 0.015 55);
-  --sidebar-accent: oklch(0.22 0.015 55);
-  --sidebar-accent-foreground: oklch(0.92 0.008 70);
-  --sidebar-border: oklch(1 0 0 / 0.08);
-  --sidebar-ring: oklch(0.72 0.14 65);
+  --radius: 0.9rem;
+
+  /* Sidebar — light & clean */
+  --sidebar: oklch(0.992 0.003 75);
+  --sidebar-foreground: oklch(0.34 0.02 60);
+  --sidebar-primary: oklch(0.62 0.15 50);
+  --sidebar-primary-foreground: oklch(0.99 0.005 70);
+  --sidebar-accent: oklch(0.95 0.018 60);
+  --sidebar-accent-foreground: oklch(0.30 0.04 50);
+  --sidebar-border: oklch(0.92 0.008 75);
+  --sidebar-ring: oklch(0.62 0.15 50);
+
+  /* Soft elevation for cards */
+  --shadow-card: 0 1px 2px oklch(0.4 0.03 60 / 0.04), 0 4px 16px oklch(0.4 0.03 60 / 0.05);
 }
 
 .dark {
@@ -138,12 +145,6 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-image:
-      url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"),
-      radial-gradient(ellipse at 20% 0%, color-mix(in oklab, var(--copper) 8%, transparent) 0%, transparent 50%),
-      linear-gradient(180deg, color-mix(in oklab, var(--accent) 12%, transparent) 0%, transparent 40%);
-    background-size: 256px 256px, 100% 100%, 100% 100%;
-    background-repeat: repeat, no-repeat, no-repeat;
   }
   html {
     @apply font-sans;

@@ -3,6 +3,7 @@ import { ArrowDownIcon, ArrowUpIcon, MinusIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export function KpiCard({
   title,
@@ -20,25 +21,38 @@ export function KpiCard({
   const TrendIcon =
     trend === "positive" ? ArrowUpIcon : trend === "negative" ? ArrowDownIcon : MinusIcon;
 
+  const valueTone =
+    trend === "positive"
+      ? "text-[var(--positive)]"
+      : trend === "negative"
+        ? "text-[var(--negative)]"
+        : "text-foreground";
+
   return (
-    <Card className="relative overflow-hidden border-border/50 bg-card/80 shadow-sm backdrop-blur-sm">
-      {/* Top accent line */}
-      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-copper/60 via-copper/30 to-transparent" />
-      <CardHeader className="gap-2 pt-5">
-        <CardTitle className="font-mono text-[11px] font-normal uppercase tracking-[0.15em] text-muted-foreground">
+    <Card className="rounded-2xl border-border/70 bg-card shadow-[var(--shadow-card)]">
+      <CardHeader className="pt-5">
+        <CardTitle className="text-[13px] font-medium text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="font-heading text-2xl font-semibold tabular-nums tracking-tight text-foreground xl:text-3xl">
+            <p
+              className={cn(
+                "font-heading text-[26px] font-semibold tabular-nums tracking-tight xl:text-[30px]",
+                valueTone,
+              )}
+            >
               {formatCurrency(value)}
             </p>
-            <p className="mt-1.5 text-[13px] text-muted-foreground">{hint}</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">{hint}</p>
           </div>
           {delta !== undefined ? (
-            <Badge variant="secondary" className="gap-1 font-mono tabular-nums">
+            <Badge
+              variant="secondary"
+              className="gap-1 rounded-full tabular-nums"
+            >
               <TrendIcon data-icon="inline-start" />
               {formatPercent(delta)}
             </Badge>
