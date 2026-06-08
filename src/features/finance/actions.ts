@@ -394,6 +394,45 @@ export async function submitBudgetLine(input: BudgetLineInput): Promise<ActionRe
   }
 }
 
+export async function submitBudgetGridLine(input: {
+  projectId: string;
+  categoryId: string;
+  subcategoryId?: string | null;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+}): Promise<ActionResult> {
+  try {
+    if (!input.projectId) return invalidResult("Proyecto requerido.");
+    if (!input.categoryId) return invalidResult("Selecciona una categoría.");
+    const description = (input.description ?? "").trim();
+    if (description.length < 2) return invalidResult("Escribe una descripción.");
+
+    const quantity = Number(input.quantity) || 1;
+    const unitPrice = Math.max(Number(input.unitPrice) || 0, 0);
+
+    saveBudgetLine({
+      projectId: input.projectId,
+      budgetVersionId: "",
+      categoryId: input.categoryId,
+      subcategoryId: input.subcategoryId ?? null,
+      description,
+      quantity,
+      unit: (input.unit ?? "").trim() || "ud",
+      unitPrice,
+      totalBudgeted: Math.round(quantity * unitPrice * 100) / 100,
+      isManualTotal: false,
+    });
+    refresh();
+    return { ok: true, message: "Partida agregada." };
+  } catch (error) {
+    return invalidResult(
+      error instanceof Error ? error.message : "No se pudo agregar la partida.",
+    );
+  }
+}
+
 export async function submitBudgetApproval(
   budgetVersionId: string,
 ): Promise<ActionResult> {
