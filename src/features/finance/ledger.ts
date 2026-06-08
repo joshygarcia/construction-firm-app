@@ -109,6 +109,8 @@ export type Transaction = {
   detail: string;
   payeeOrSource: string;
   paymentMethod: string;
+  /** Si el gasto se pagó con tarjeta, id de la tarjeta. No reduce la caja. */
+  cardId: string | null;
   externalReference: string;
   contractorContractId: string | null;
   receiptPath: string | null;
@@ -183,6 +185,50 @@ export type Invoice = {
   createdAt: string;
 };
 
+// ---------- Tarjetas y préstamos (nivel empresa) ----------
+
+/** Tarjeta de crédito de la empresa. Su saldo (cuenta por pagar) se deriva. */
+export type Card = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+/** Pago/abono a una tarjeta. Reduce el efectivo y el saldo de la tarjeta. */
+export type CardPayment = {
+  id: string;
+  cardId: string;
+  date: string;
+  amount: number;
+  paymentMethod: string;
+  notes: string;
+};
+
+/** Préstamo que recibe la empresa. Su saldo por pagar se deriva de los movimientos. */
+export type Loan = {
+  id: string;
+  name: string;
+  lender: string;
+  notes: string;
+  isActive: boolean;
+};
+
+export type LoanMovementType = "disbursement" | "payment";
+
+/**
+ * Movimiento de un préstamo:
+ * - "disbursement": dinero recibido (sube caja y sube saldo por pagar).
+ * - "payment": abono al préstamo (baja caja y baja saldo por pagar).
+ */
+export type LoanMovement = {
+  id: string;
+  loanId: string;
+  type: LoanMovementType;
+  date: string;
+  amount: number;
+  notes: string;
+};
+
 export type AppData = {
   organization: Organization;
   currentUser: CurrentUser;
@@ -198,6 +244,10 @@ export type AppData = {
   contractorPayments: ContractorPayment[];
   suggestionOptions: SuggestionOption[];
   invoices: Invoice[];
+  cards: Card[];
+  cardPayments: CardPayment[];
+  loans: Loan[];
+  loanMovements: LoanMovement[];
 };
 
 export type ProjectSummary = {
@@ -290,6 +340,7 @@ export type CreateExpenseInput = {
   detail: string;
   payeeOrSource: string;
   paymentMethod: string;
+  cardId?: string | null;
   externalReference?: string;
   receiptPath?: string | null;
 };
@@ -381,6 +432,7 @@ export type UpdateTransactionInput = {
   detail: string;
   payeeOrSource: string;
   paymentMethod: string;
+  cardId?: string | null;
 };
 
 export type UpdateBudgetLineInput = {
@@ -482,6 +534,99 @@ export type CreateBudgetVersionInput = {
 export type UpdateBudgetVersionInput = {
   id: string;
   versionName: string;
+};
+
+export type CreateCardInput = {
+  name: string;
+};
+
+export type UpdateCardInput = {
+  id: string;
+  name: string;
+  isActive?: boolean;
+};
+
+export type CreateCardPaymentInput = {
+  cardId: string;
+  date: string;
+  amount: number;
+  paymentMethod?: string;
+  notes?: string;
+};
+
+export type CreateLoanInput = {
+  name: string;
+  lender?: string;
+  notes?: string;
+};
+
+export type UpdateLoanInput = {
+  id: string;
+  name: string;
+  lender?: string;
+  notes?: string;
+  isActive?: boolean;
+};
+
+export type CreateLoanMovementInput = {
+  loanId: string;
+  type: LoanMovementType;
+  date: string;
+  amount: number;
+  notes?: string;
+};
+
+export type CardBalanceRow = {
+  cardId: string;
+  name: string;
+  charged: number;
+  paid: number;
+  balance: number;
+  isActive: boolean;
+};
+
+export type LoanBalanceRow = {
+  loanId: string;
+  name: string;
+  lender: string;
+  disbursed: number;
+  paid: number;
+  balance: number;
+  isActive: boolean;
+};
+
+export type AccountsReceivableRow = {
+  invoiceId: string;
+  projectId: string;
+  invoiceNumber: string;
+  recipientName: string;
+  issueDate: string;
+  dueDate: string | null;
+  total: number;
+};
+
+export type AccountsPayableSummary = {
+  contractors: number;
+  cards: number;
+  loans: number;
+  total: number;
+};
+
+export type CompanyFinanceSummary = {
+  cash: number;
+  cardsPayable: number;
+  loansPayable: number;
+  receivable: number;
+};
+
+export type MonthlyMovementRow = {
+  monthKey: string;
+  ventas: number;
+  gastos: number;
+  cobros: number;
+  pagosTarjeta: number;
+  abonosPrestamo: number;
+  prestamosRecibidos: number;
 };
 
 function createId(prefix: string) {
@@ -598,19 +743,37 @@ function activeTransactions(data: AppData, projectId: string) {
 }
 
 function activeBudgetLines(data: AppData, projectId: string) {
-  const approvedVersions = new Set(
-    data.budgetVersions
-      .filter(
-        (item) =>
-          item.projectId === projectId &&
-          (item.status === "approved" || item.isLocked),
-      )
-      .map((item) => item.id),
-  );
+  // Flujo simplificado: todas las partidas del proyecto cuentan de inmediato,
+  // sin depender de aprobar/bloquear una versión.
+  return data.budgetLines.filter((item) => item.projectId === projectId);
+}
 
-  return data.budgetLines.filter(
-    (item) => item.projectId === projectId && approvedVersions.has(item.budgetVersionId),
+/**
+ * Devuelve la versión de presupuesto del proyecto, creándola si no existe.
+ * Mantiene `budgetVersions` como contenedor técnico oculto (uno por proyecto).
+ * Muta `data` (se espera recibir un clon).
+ */
+export function ensureProjectBudgetVersion(
+  data: AppData,
+  projectId: string,
+): BudgetVersion {
+  const existing = data.budgetVersions.find(
+    (item) => item.projectId === projectId,
   );
+  if (existing) {
+    return existing;
+  }
+
+  const version: BudgetVersion = {
+    id: createId("budget-version"),
+    projectId,
+    versionName: "Presupuesto",
+    status: "approved",
+    isLocked: false,
+    approvedAt: new Date().toISOString(),
+  };
+  data.budgetVersions.push(version);
+  return version;
 }
 
 function nameMaps(data: AppData) {
@@ -767,11 +930,15 @@ export function deriveProjectSummary(data: AppData, projectId: string): ProjectS
         accumulator.totalIncome += transaction.amount;
       } else {
         accumulator.totalExpenses += transaction.amount;
+        // Los gastos en tarjeta no reducen la caja del proyecto (se financian).
+        if (!transaction.cardId) {
+          accumulator.cashExpenses += transaction.amount;
+        }
       }
 
       return accumulator;
     },
-    { totalIncome: 0, totalExpenses: 0 },
+    { totalIncome: 0, totalExpenses: 0, cashExpenses: 0 },
   );
   const totalBudget = budgetVsActual.reduce(
     (sum, row) => sum + row.budgeted,
@@ -788,7 +955,7 @@ export function deriveProjectSummary(data: AppData, projectId: string): ProjectS
     totalIncome: totals.totalIncome,
     totalExpenses: totals.totalExpenses,
     budgetRemaining: totalBudget - totals.totalExpenses,
-    cashAvailable: totals.totalIncome - totals.totalExpenses,
+    cashAvailable: totals.totalIncome - totals.cashExpenses,
     pendingContractorBalances,
     budgetConsumedPercent:
       totalBudget > 0 ? (totals.totalExpenses / totalBudget) * 100 : 0,
@@ -923,9 +1090,10 @@ export function deriveBudgetVsActualMonthly(
 
 export function createProject(data: AppData, input: CreateProjectInput): AppData {
   const next = structuredClone(data);
+  const projectId = createId("project");
 
   next.projects.push({
-    id: createId("project"),
+    id: projectId,
     name: input.name.trim(),
     clientName: input.clientName.trim(),
     location: input.location.trim(),
@@ -934,6 +1102,9 @@ export function createProject(data: AppData, input: CreateProjectInput): AppData
     endDate: input.endDate ?? null,
     notes: input.notes?.trim() ?? "",
   });
+
+  // Autocrear el presupuesto del proyecto para que las partidas cuenten de inmediato.
+  ensureProjectBudgetVersion(next, projectId);
 
   return next;
 }
@@ -1226,6 +1397,7 @@ export function createExpense(data: AppData, input: CreateExpenseInput): AppData
     detail: input.detail.trim(),
     payeeOrSource: input.payeeOrSource.trim(),
     paymentMethod: input.paymentMethod.trim(),
+    cardId: input.cardId ?? null,
     externalReference: input.externalReference?.trim() ?? "",
     contractorContractId: null,
     receiptPath: input.receiptPath ?? null,
@@ -1257,6 +1429,7 @@ export function createIncome(data: AppData, input: CreateIncomeInput): AppData {
     detail: input.detail.trim(),
     payeeOrSource: input.payeeOrSource.trim(),
     paymentMethod: input.paymentMethod.trim(),
+    cardId: null,
     externalReference: input.externalReference?.trim() ?? "",
     contractorContractId: null,
     receiptPath: input.receiptPath ?? null,
@@ -1273,10 +1446,6 @@ export function createBudgetLine(data: AppData, input: CreateBudgetLineInput): A
 
   if (!version || version.projectId !== input.projectId) {
     throw new Error("Versión de presupuesto no encontrada.");
-  }
-
-  if (version.isLocked) {
-    throw new Error("La versión aprobada no puede editarse.");
   }
 
   if (input.categoryId) {
@@ -1403,6 +1572,9 @@ export function updateTransaction(data: AppData, input: UpdateTransactionInput):
   transaction.detail = input.detail.trim();
   transaction.payeeOrSource = input.payeeOrSource.trim();
   transaction.paymentMethod = input.paymentMethod.trim();
+  if (input.cardId !== undefined) {
+    transaction.cardId = input.cardId;
+  }
 
   if (transaction.transactionType === "expense" && input.categoryId) {
     transaction.categoryId = input.categoryId;
@@ -1539,6 +1711,7 @@ export function createContractorPayment(
       next.contractors.find((item) => item.id === contract.contractorId)?.fullName ??
       "Contratista",
     paymentMethod: input.paymentMethod.trim(),
+    cardId: null,
     externalReference: "",
     contractorContractId: contract.id,
     receiptPath: null,
@@ -1870,6 +2043,357 @@ export function updateBudgetSection(
   section.code = input.code.trim();
   section.name = requireNonEmptyValue(input.name, "El nombre de la sección es obligatorio.");
   section.costType = input.costType;
+
+  return next;
+}
+
+// ---------- Tarjetas, préstamos y finanzas de empresa (derive) ----------
+
+export function deriveCardBalances(data: AppData): CardBalanceRow[] {
+  const chargedByCard = new Map<string, number>();
+  for (const txn of data.transactions) {
+    if (txn.deletedAt !== null) continue;
+    if (txn.transactionType !== "expense") continue;
+    if (!txn.cardId) continue;
+    chargedByCard.set(txn.cardId, (chargedByCard.get(txn.cardId) ?? 0) + txn.amount);
+  }
+
+  const paidByCard = new Map<string, number>();
+  for (const payment of data.cardPayments ?? []) {
+    paidByCard.set(payment.cardId, (paidByCard.get(payment.cardId) ?? 0) + payment.amount);
+  }
+
+  return (data.cards ?? [])
+    .map<CardBalanceRow>((card) => {
+      const charged = chargedByCard.get(card.id) ?? 0;
+      const paid = paidByCard.get(card.id) ?? 0;
+      return {
+        cardId: card.id,
+        name: card.name,
+        charged,
+        paid,
+        balance: charged - paid,
+        isActive: card.isActive,
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function deriveLoanBalances(data: AppData): LoanBalanceRow[] {
+  const disbursedByLoan = new Map<string, number>();
+  const paidByLoan = new Map<string, number>();
+
+  for (const movement of data.loanMovements ?? []) {
+    if (movement.type === "disbursement") {
+      disbursedByLoan.set(
+        movement.loanId,
+        (disbursedByLoan.get(movement.loanId) ?? 0) + movement.amount,
+      );
+    } else {
+      paidByLoan.set(
+        movement.loanId,
+        (paidByLoan.get(movement.loanId) ?? 0) + movement.amount,
+      );
+    }
+  }
+
+  return (data.loans ?? [])
+    .map<LoanBalanceRow>((loan) => {
+      const disbursed = disbursedByLoan.get(loan.id) ?? 0;
+      const paid = paidByLoan.get(loan.id) ?? 0;
+      return {
+        loanId: loan.id,
+        name: loan.name,
+        lender: loan.lender,
+        disbursed,
+        paid,
+        balance: disbursed - paid,
+        isActive: loan.isActive,
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function deriveAccountsReceivable(
+  data: AppData,
+  projectId?: string,
+): { total: number; items: AccountsReceivableRow[] } {
+  const items = data.invoices
+    .filter((invoice) => (projectId ? invoice.projectId === projectId : true))
+    .filter((invoice) => invoice.status === "sent")
+    .map<AccountsReceivableRow>((invoice) => ({
+      invoiceId: invoice.id,
+      projectId: invoice.projectId,
+      invoiceNumber: invoice.invoiceNumber,
+      recipientName: invoice.recipientName,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      total: invoice.total,
+    }))
+    .sort((left, right) => left.issueDate.localeCompare(right.issueDate));
+
+  const total = items.reduce((sum, item) => sum + item.total, 0);
+  return { total, items };
+}
+
+export function deriveAccountsPayable(
+  data: AppData,
+  projectId?: string,
+): AccountsPayableSummary {
+  const contractors = deriveContractorBalances(data, projectId).reduce(
+    (sum, row) => sum + row.pendingBalance,
+    0,
+  );
+  // Tarjetas y préstamos son a nivel empresa; no se asignan a un proyecto.
+  const cards = projectId
+    ? 0
+    : deriveCardBalances(data).reduce((sum, row) => sum + row.balance, 0);
+  const loans = projectId
+    ? 0
+    : deriveLoanBalances(data).reduce((sum, row) => sum + row.balance, 0);
+
+  return { contractors, cards, loans, total: contractors + cards + loans };
+}
+
+export function deriveCompanyFinance(data: AppData): CompanyFinanceSummary {
+  let cash = 0;
+  for (const txn of data.transactions) {
+    if (txn.deletedAt !== null) continue;
+    if (txn.transactionType === "income") {
+      cash += txn.amount;
+    } else if (!txn.cardId) {
+      cash -= txn.amount;
+    }
+  }
+
+  for (const movement of data.loanMovements ?? []) {
+    cash += movement.type === "disbursement" ? movement.amount : -movement.amount;
+  }
+  for (const payment of data.cardPayments ?? []) {
+    cash -= payment.amount;
+  }
+
+  const cardsPayable = deriveCardBalances(data).reduce((sum, row) => sum + row.balance, 0);
+  const loansPayable = deriveLoanBalances(data).reduce((sum, row) => sum + row.balance, 0);
+  const receivable = deriveAccountsReceivable(data).total;
+
+  return { cash, cardsPayable, loansPayable, receivable };
+}
+
+export function deriveMonthlyMovements(
+  data: AppData,
+  projectId?: string,
+): MonthlyMovementRow[] {
+  const groups = new Map<string, MonthlyMovementRow>();
+  const ensure = (monthKey: string) => {
+    let row = groups.get(monthKey);
+    if (!row) {
+      row = {
+        monthKey,
+        ventas: 0,
+        gastos: 0,
+        cobros: 0,
+        pagosTarjeta: 0,
+        abonosPrestamo: 0,
+        prestamosRecibidos: 0,
+      };
+      groups.set(monthKey, row);
+    }
+    return row;
+  };
+
+  // Ventas = facturado (facturas emitidas o pagadas), por fecha de emisión.
+  for (const invoice of data.invoices) {
+    if (projectId && invoice.projectId !== projectId) continue;
+    if (invoice.status !== "sent" && invoice.status !== "paid") continue;
+    ensure(monthKeyFromDate(invoice.issueDate)).ventas += invoice.total;
+  }
+
+  for (const txn of data.transactions) {
+    if (txn.deletedAt !== null) continue;
+    if (projectId && txn.projectId !== projectId) continue;
+    const row = ensure(monthKeyFromDate(txn.transactionDate));
+    if (txn.transactionType === "income") {
+      row.cobros += txn.amount;
+    } else {
+      row.gastos += txn.amount;
+    }
+  }
+
+  // Movimientos a nivel empresa (solo en la vista global, sin filtrar por proyecto).
+  if (!projectId) {
+    for (const payment of data.cardPayments ?? []) {
+      ensure(monthKeyFromDate(payment.date)).pagosTarjeta += payment.amount;
+    }
+    for (const movement of data.loanMovements ?? []) {
+      const row = ensure(monthKeyFromDate(movement.date));
+      if (movement.type === "payment") {
+        row.abonosPrestamo += movement.amount;
+      } else {
+        row.prestamosRecibidos += movement.amount;
+      }
+    }
+  }
+
+  return [...groups.values()].sort((left, right) =>
+    left.monthKey.localeCompare(right.monthKey),
+  );
+}
+
+// ---------- Tarjetas (CRUD) ----------
+
+export function createCard(data: AppData, input: CreateCardInput): AppData {
+  const name = requireNonEmptyValue(input.name, "El nombre de la tarjeta es obligatorio.");
+  const next = structuredClone(data);
+
+  const exists = next.cards.find(
+    (card) => normalizeLookupValue(card.name) === normalizeLookupValue(name),
+  );
+  if (exists) {
+    return next;
+  }
+
+  next.cards.push({ id: createId("card"), name, isActive: true });
+  return next;
+}
+
+export function updateCard(data: AppData, input: UpdateCardInput): AppData {
+  const next = structuredClone(data);
+  const card = next.cards.find((item) => item.id === input.id);
+
+  if (!card) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+
+  card.name = requireNonEmptyValue(input.name, "El nombre de la tarjeta es obligatorio.");
+  if (typeof input.isActive === "boolean") {
+    card.isActive = input.isActive;
+  }
+
+  return next;
+}
+
+export function deleteCard(data: AppData, cardId: string): AppData {
+  const next = structuredClone(data);
+  const index = next.cards.findIndex((item) => item.id === cardId);
+
+  if (index === -1) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+
+  const used =
+    next.transactions.some((txn) => txn.cardId === cardId && txn.deletedAt === null) ||
+    next.cardPayments.some((payment) => payment.cardId === cardId);
+  if (used) {
+    throw new Error("No se puede eliminar una tarjeta con movimientos. Desactívala.");
+  }
+
+  next.cards.splice(index, 1);
+  return next;
+}
+
+export function createCardPayment(
+  data: AppData,
+  input: CreateCardPaymentInput,
+): AppData {
+  if (input.amount <= 0) {
+    throw new Error("El monto debe ser mayor a cero.");
+  }
+
+  const next = structuredClone(data);
+  const card = next.cards.find((item) => item.id === input.cardId);
+
+  if (!card) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+
+  next.cardPayments.push({
+    id: createId("card-payment"),
+    cardId: input.cardId,
+    date: input.date,
+    amount: input.amount,
+    paymentMethod: input.paymentMethod?.trim() ?? "efectivo",
+    notes: input.notes?.trim() ?? "",
+  });
+
+  return next;
+}
+
+// ---------- Préstamos (CRUD) ----------
+
+export function createLoan(data: AppData, input: CreateLoanInput): AppData {
+  const name = requireNonEmptyValue(input.name, "El nombre del préstamo es obligatorio.");
+  const next = structuredClone(data);
+
+  next.loans.push({
+    id: createId("loan"),
+    name,
+    lender: input.lender?.trim() ?? "",
+    notes: input.notes?.trim() ?? "",
+    isActive: true,
+  });
+
+  return next;
+}
+
+export function updateLoan(data: AppData, input: UpdateLoanInput): AppData {
+  const next = structuredClone(data);
+  const loan = next.loans.find((item) => item.id === input.id);
+
+  if (!loan) {
+    throw new Error("Préstamo no encontrado.");
+  }
+
+  loan.name = requireNonEmptyValue(input.name, "El nombre del préstamo es obligatorio.");
+  loan.lender = input.lender?.trim() ?? loan.lender;
+  loan.notes = input.notes?.trim() ?? loan.notes;
+  if (typeof input.isActive === "boolean") {
+    loan.isActive = input.isActive;
+  }
+
+  return next;
+}
+
+export function deleteLoan(data: AppData, loanId: string): AppData {
+  const next = structuredClone(data);
+  const index = next.loans.findIndex((item) => item.id === loanId);
+
+  if (index === -1) {
+    throw new Error("Préstamo no encontrado.");
+  }
+
+  const used = next.loanMovements.some((movement) => movement.loanId === loanId);
+  if (used) {
+    throw new Error("No se puede eliminar un préstamo con movimientos. Desactívalo.");
+  }
+
+  next.loans.splice(index, 1);
+  return next;
+}
+
+export function createLoanMovement(
+  data: AppData,
+  input: CreateLoanMovementInput,
+): AppData {
+  if (input.amount <= 0) {
+    throw new Error("El monto debe ser mayor a cero.");
+  }
+
+  const next = structuredClone(data);
+  const loan = next.loans.find((item) => item.id === input.loanId);
+
+  if (!loan) {
+    throw new Error("Préstamo no encontrado.");
+  }
+
+  next.loanMovements.push({
+    id: createId("loan-movement"),
+    loanId: input.loanId,
+    type: input.type,
+    date: input.date,
+    amount: input.amount,
+    notes: input.notes?.trim() ?? "",
+  });
 
   return next;
 }

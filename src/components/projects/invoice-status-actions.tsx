@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { CheckCircleIcon, SendIcon, XCircleIcon, Trash2Icon } from "lucide-react";
+import { CheckCircleIcon, PrinterIcon, SendIcon, XCircleIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,15 @@ export function InvoiceStatusActions({
 
   return (
     <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        title="Imprimir / PDF"
+        onClick={() => window.open(`/api/export/invoice/${invoiceId}`, "_blank")}
+      >
+        <PrinterIcon className="size-3.5" />
+      </Button>
       {status === "draft" && (
         <Button
           variant="ghost"

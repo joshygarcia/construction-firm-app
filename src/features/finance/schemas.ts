@@ -22,6 +22,7 @@ export const expenseSchema = z.object({
   detail: z.string().min(2, "Agrega un detalle."),
   payeeOrSource: z.string().min(2, "Agrega un suplidor o persona."),
   paymentMethod: z.string().min(2, "Selecciona el método de pago."),
+  cardId: z.string().optional().nullable(),
 });
 
 export const incomeSchema = z.object({
@@ -48,7 +49,7 @@ export const contractorPaymentSchema = z.object({
 export const budgetLineSchema = z.object({
   mode: z.literal("budget_line"),
   projectId: z.string().min(1, "Selecciona un proyecto."),
-  budgetVersionId: z.string().min(1, "Selecciona una versión."),
+  budgetVersionId: z.string().optional(),
   categoryId: z.string().min(1, "Selecciona una categoría."),
   subcategoryId: z.string().optional().nullable(),
   description: z.string().min(2, "Agrega una descripción."),
@@ -90,6 +91,7 @@ export const updateTransactionSchema = z.object({
   detail: z.string().min(2, "Agrega un detalle."),
   payeeOrSource: z.string().min(2, "Agrega un suplidor o persona."),
   paymentMethod: z.string().min(2, "Selecciona el método de pago."),
+  cardId: z.string().optional().nullable(),
 });
 
 export const updateBudgetLineSchema = z.object({
@@ -180,6 +182,55 @@ export type BudgetVersionFormInput = z.output<typeof budgetVersionSchema>;
 export type UpdateBudgetVersionFormInput = z.output<typeof updateBudgetVersionSchema>;
 export type BudgetSectionFormInput = z.output<typeof budgetSectionSchema>;
 export type UpdateBudgetSectionFormInput = z.output<typeof updateBudgetSectionSchema>;
+
+// ---------- Tarjetas y préstamos ----------
+
+export const cardSchema = z.object({
+  name: z.string().min(2, "El nombre de la tarjeta es obligatorio."),
+});
+
+export const updateCardSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(2, "El nombre de la tarjeta es obligatorio."),
+  isActive: z.boolean().optional(),
+});
+
+export const cardPaymentSchema = z.object({
+  cardId: z.string().min(1, "Selecciona una tarjeta."),
+  date: z.string().min(1, "Selecciona una fecha."),
+  amount: amountField,
+  paymentMethod: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const loanSchema = z.object({
+  name: z.string().min(2, "El nombre del préstamo es obligatorio."),
+  lender: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const updateLoanSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(2, "El nombre del préstamo es obligatorio."),
+  lender: z.string().optional(),
+  notes: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const loanMovementSchema = z.object({
+  loanId: z.string().min(1, "Selecciona un préstamo."),
+  type: z.enum(["disbursement", "payment"]),
+  date: z.string().min(1, "Selecciona una fecha."),
+  amount: amountField,
+  notes: z.string().optional(),
+});
+
+export type CardFormInput = z.output<typeof cardSchema>;
+export type UpdateCardFormInput = z.output<typeof updateCardSchema>;
+export type CardPaymentFormInput = z.output<typeof cardPaymentSchema>;
+export type LoanFormInput = z.output<typeof loanSchema>;
+export type UpdateLoanFormInput = z.output<typeof updateLoanSchema>;
+export type LoanMovementFormInput = z.output<typeof loanMovementSchema>;
 
 export type ProjectInput = z.output<typeof projectSchema>;
 export type ExpenseInput = z.output<typeof expenseSchema>;

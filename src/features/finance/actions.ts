@@ -29,13 +29,19 @@ import {
   budgetLineSchema,
   budgetSectionSchema,
   budgetVersionSchema,
+  cardPaymentSchema,
+  cardSchema,
   contractorContractSchema,
   contractorPaymentSchema,
   contractorSchema,
   expenseSchema,
   incomeSchema,
+  loanMovementSchema,
+  loanSchema,
   projectSchema,
   quickEntrySchema,
+  updateCardSchema,
+  updateLoanSchema,
   updateBudgetLineSchema,
   updateBudgetSectionSchema,
   updateBudgetVersionSchema,
@@ -74,6 +80,15 @@ import {
   saveBudgetLine,
   saveBudgetSection,
   saveBudgetVersion,
+  ensureProjectBudget,
+  saveCard,
+  editCard,
+  removeCard,
+  saveCardPayment,
+  saveLoan,
+  editLoan,
+  removeLoan,
+  saveLoanMovement,
   editCategory,
   editSubcategory,
   removeCategory,
@@ -155,6 +170,7 @@ function mapExpenseInput(input: ExpenseInput): CreateExpenseInput {
     detail: input.detail,
     payeeOrSource: input.payeeOrSource,
     paymentMethod: input.paymentMethod,
+    cardId: input.cardId ?? null,
   };
 }
 
@@ -186,7 +202,8 @@ function mapContractorPaymentInput(
 function mapBudgetLineInput(input: BudgetLineInput): CreateBudgetLineInput {
   return {
     projectId: input.projectId,
-    budgetVersionId: input.budgetVersionId,
+    // El store resuelve/crea la versión del proyecto si viene vacío.
+    budgetVersionId: input.budgetVersionId ?? "",
     categoryId: input.categoryId,
     subcategoryId: input.subcategoryId ?? null,
     description: input.description,
@@ -824,30 +841,138 @@ export async function submitExcelImport(formData: FormData): Promise<ActionResul
 
     // --- Import budget lines ------------------------------------------------
     if (budgetLines.length > 0) {
-      // Find or pick the first draft budget version for this project
-      const budgetVersion = data.budgetVersions.find(
-        (v) => v.projectId === projectId && v.status === "draft",
-      );
-
-      if (!budgetVersion) {
-        importErrors.push(
-          "No se encontró una versión de presupuesto en borrador para este proyecto. Las líneas de presupuesto no fueron importadas.",
+      // Asegura el presupuesto del proyecto (lo crea si no existe).
+      const budgetVersionId = ensureProjectBudget(projectId);
+      {
+        // Build a lookup of existing sections in this budget version so we
+        // can reuse them across successive imports and within a single file.
+        const sectionByKey = new Map(
+          data.budgetSections
+            .filter((s) => s.budgetVersionId === budgetVersionId)
+            .map((s) => [
+              `${s.code.trim().toLowerCase()}::${s.name.trim().toLowerCase()}`,
+              s,
+            ]),
         );
-      } else {
+        // Fallback lookup by name alone (for rows that didn't carry a code).
+        const sectionByName = new Map(
+          data.budgetSections
+            .filter((s) => s.budgetVersionId === budgetVersionId)
+            .map((s) => [s.name.trim().toLowerCase(), s]),
+        );
+
+        /**
+         * Find-or-create a BudgetSection for this version and return its id.
+         * Heuristic: if the section name matches an existing chart-of-accounts
+         * category, also propagate that category to the line (so imported
+         * budgets stay linked to the same categories used by transactions).
+         */
+        const resolveSection = (
+          name: string,
+          code: string,
+        ): { sectionId: string | null; categoryIdHint: string | null } => {
+          if (!name) return { sectionId: null, categoryIdHint: null };
+          const normName = name.trim().toLowerCase();
+          const normCode = code.trim().toLowerCase();
+
+          // Try exact code+name match, else fall back to name-only match.
+          let section =
+            sectionByKey.get(`${normCode}::${normName}`) ??
+            sectionByName.get(normName);
+
+          if (!section) {
+            try {
+              const created = saveBudgetSection({
+                budgetVersionId: budgetVersionId,
+                code: code || String(sectionByName.size + 1),
+                name,
+                costType: "direct",
+              });
+              if (created) {
+                section = created;
+                sectionByKey.set(
+                  `${created.code.trim().toLowerCase()}::${created.name.trim().toLowerCase()}`,
+                  created,
+                );
+                sectionByName.set(created.name.trim().toLowerCase(), created);
+              }
+            } catch {
+              // Section create may fail if the version is locked etc.
+              return { sectionId: null, categoryIdHint: null };
+            }
+          }
+
+          // If the section name matches a known category, link it.
+          const matchedCategory = categoryByName.get(normName);
+
+          return {
+            sectionId: section?.id ?? null,
+            categoryIdHint: matchedCategory?.id ?? null,
+          };
+        };
+
         for (const bl of budgetLines) {
           try {
+            const { sectionId, categoryIdHint } = resolveSection(
+              bl.sectionName,
+              bl.sectionCode,
+            );
+
+            // Resolve category: explicit column on the row wins, else the
+            // hint from section-name matching.
+            let categoryId: string | null = categoryIdHint;
+            if (bl.categoryName) {
+              const existing = categoryByName.get(
+                bl.categoryName.trim().toLowerCase(),
+              );
+              if (existing) {
+                categoryId = existing.id;
+              } else {
+                const created = saveCategory({ name: bl.categoryName });
+                if (created) {
+                  categoryId = created.id;
+                  categoryByName.set(
+                    bl.categoryName.trim().toLowerCase(),
+                    created,
+                  );
+                }
+              }
+            }
+
+            // Resolve subcategory (only meaningful if we have a categoryId).
+            let subcategoryId: string | null = null;
+            if (categoryId && bl.subcategoryName) {
+              const key = `${categoryId}::${bl.subcategoryName.trim().toLowerCase()}`;
+              const existing = subcategoryByName.get(key);
+              if (existing) {
+                subcategoryId = existing.id;
+              } else {
+                const created = saveSubcategory({
+                  categoryId,
+                  name: bl.subcategoryName,
+                });
+                if (created) {
+                  subcategoryId = created.id;
+                  subcategoryByName.set(key, created);
+                }
+              }
+            }
+
             saveBudgetLine({
               projectId,
-              budgetVersionId: budgetVersion.id,
-              categoryId: null,
-              subcategoryId: null,
+              budgetVersionId: budgetVersionId,
+              sectionId,
+              categoryId,
+              subcategoryId,
+              phase: bl.phase || null,
+              area: bl.area || null,
               description: bl.description,
               lineCode: bl.lineCode || null,
               quantity: bl.quantity,
               unit: bl.unit,
               unitPrice: bl.unitPrice,
               totalBudgeted: bl.totalBudgeted,
-              notes: "",
+              notes: bl.notes || "",
               isManualTotal: bl.totalBudgeted !== bl.quantity * bl.unitPrice,
             });
             importedBudgetLines++;
@@ -1171,5 +1296,147 @@ export async function submitDeleteBudgetSection(sectionId: string): Promise<Acti
     return invalidResult(
       error instanceof Error ? error.message : "No se pudo eliminar la sección.",
     );
+  }
+}
+
+// ---------- Tarjetas (empresa) ----------
+
+export async function submitCard(formData: FormData): Promise<ActionResult> {
+  const parsed = cardSchema.safeParse({ name: String(formData.get("name") ?? "") });
+  if (!parsed.success) {
+    return invalidResult("Revisa el nombre de la tarjeta.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    saveCard(parsed.data);
+    refresh();
+    return { ok: true, message: "Tarjeta creada correctamente." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo crear la tarjeta.");
+  }
+}
+
+export async function submitUpdateCard(formData: FormData): Promise<ActionResult> {
+  const parsed = updateCardSchema.safeParse({
+    id: String(formData.get("id") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    isActive: formData.get("isActive") != null ? formData.get("isActive") === "true" : undefined,
+  });
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos de la tarjeta.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    editCard(parsed.data);
+    refresh();
+    return { ok: true, message: "Tarjeta actualizada correctamente." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo actualizar la tarjeta.");
+  }
+}
+
+export async function submitDeleteCard(cardId: string): Promise<ActionResult> {
+  try {
+    removeCard(cardId);
+    refresh();
+    return { ok: true, message: "Tarjeta eliminada correctamente." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar la tarjeta.");
+  }
+}
+
+export async function submitCardPayment(formData: FormData): Promise<ActionResult> {
+  const amountRaw = formData.get("amount");
+  const parsed = cardPaymentSchema.safeParse({
+    cardId: String(formData.get("cardId") ?? ""),
+    date: String(formData.get("date") ?? ""),
+    amount: amountRaw ? Number(amountRaw) : 0,
+    paymentMethod: formData.get("paymentMethod") ? String(formData.get("paymentMethod")) : undefined,
+    notes: String(formData.get("notes") ?? ""),
+  });
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos del pago de tarjeta.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    saveCardPayment(parsed.data);
+    refresh();
+    return { ok: true, message: "Pago de tarjeta registrado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo registrar el pago.");
+  }
+}
+
+// ---------- Préstamos (empresa) ----------
+
+export async function submitLoan(formData: FormData): Promise<ActionResult> {
+  const parsed = loanSchema.safeParse({
+    name: String(formData.get("name") ?? ""),
+    lender: String(formData.get("lender") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  });
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos del préstamo.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    saveLoan(parsed.data);
+    refresh();
+    return { ok: true, message: "Préstamo creado correctamente." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo crear el préstamo.");
+  }
+}
+
+export async function submitUpdateLoan(formData: FormData): Promise<ActionResult> {
+  const parsed = updateLoanSchema.safeParse({
+    id: String(formData.get("id") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    lender: String(formData.get("lender") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+    isActive: formData.get("isActive") != null ? formData.get("isActive") === "true" : undefined,
+  });
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos del préstamo.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    editLoan(parsed.data);
+    refresh();
+    return { ok: true, message: "Préstamo actualizado correctamente." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo actualizar el préstamo.");
+  }
+}
+
+export async function submitDeleteLoan(loanId: string): Promise<ActionResult> {
+  try {
+    removeLoan(loanId);
+    refresh();
+    return { ok: true, message: "Préstamo eliminado correctamente." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar el préstamo.");
+  }
+}
+
+export async function submitLoanMovement(formData: FormData): Promise<ActionResult> {
+  const amountRaw = formData.get("amount");
+  const parsed = loanMovementSchema.safeParse({
+    loanId: String(formData.get("loanId") ?? ""),
+    type: String(formData.get("type") ?? "") as "disbursement" | "payment",
+    date: String(formData.get("date") ?? ""),
+    amount: amountRaw ? Number(amountRaw) : 0,
+    notes: String(formData.get("notes") ?? ""),
+  });
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos del movimiento.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    saveLoanMovement(parsed.data);
+    refresh();
+    return {
+      ok: true,
+      message:
+        parsed.data.type === "disbursement"
+          ? "Préstamo recibido registrado."
+          : "Abono a préstamo registrado.",
+    };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo registrar el movimiento.");
   }
 }

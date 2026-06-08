@@ -22,6 +22,7 @@ import type {
   BudgetLine,
   BudgetVsActualRow,
   BudgetVersion,
+  Card as CardEntity,
   Category,
   Contractor,
   ContractorBalanceRow,
@@ -87,10 +88,16 @@ type QuickEntryPanelProps = {
   contractorBalances: ContractorBalanceRow[];
   contracts: ContractorContract[];
   suggestionOptions: SuggestionOption[];
+  cards?: CardEntity[];
   defaultProjectId?: string;
   defaultMode?: Mode;
   availableModes?: Mode[];
 };
+
+/** ¿El método de pago seleccionado es "tarjeta"? */
+function isCardMethod(method: string | undefined) {
+  return (method ?? "").trim().toLocaleLowerCase().includes("tarjeta");
+}
 
 type CreatableFieldProps = {
   createCategoryOption: (name: string) => Promise<CreatableOption | null>;
@@ -195,12 +202,21 @@ function ExpenseTab(
       detail: "",
       payeeOrSource: "",
       paymentMethod: "transferencia",
+      cardId: "",
     },
   });
 
+  const cards = useMemo(
+    () => (props.cards ?? []).filter((card) => card.isActive),
+    [props.cards],
+  );
   const selectedProjectId = useWatch({
     control: form.control,
     name: "projectId",
+  });
+  const selectedCardId = useWatch({
+    control: form.control,
+    name: "cardId",
   });
   const selectedCategoryId = useWatch({
     control: form.control,
@@ -315,19 +331,28 @@ function ExpenseTab(
   );
 
   const onSubmit = form.handleSubmit((values) => {
+    const usesCard = isCardMethod(values.paymentMethod);
+    if (usesCard && !values.cardId) {
+      toast.error("Selecciona la tarjeta con la que se pagó.");
+      return;
+    }
+    // Si no es tarjeta, no guardar ninguna tarjeta asociada.
+    const payload: ExpenseInput = { ...values, cardId: usesCard ? values.cardId : null };
+
     startTransition(async () => {
-      const result = await submitQuickEntry(values);
+      const result = await submitQuickEntry(payload);
 
       if (!result.ok) {
         toast.error(result.message);
         return;
       }
 
-      props.onSuccess(values);
+      props.onSuccess(payload);
       toast.success(result.message);
       form.reset({
         ...values,
         budgetLineId: values.budgetLineId ?? "",
+        cardId: usesCard ? values.cardId ?? "" : "",
         amount: 0,
         detail: "",
         payeeOrSource: "",
@@ -498,9 +523,43 @@ function ExpenseTab(
             searchPlaceholder="Buscar o crear metodo"
             value={selectedPaymentMethod}
           />
-          <FieldDescription>Ejemplo: transferencia, cheque, efectivo.</FieldDescription>
+          <FieldDescription>Ejemplo: transferencia, cheque, efectivo, tarjeta.</FieldDescription>
           <FieldError errors={[form.formState.errors.paymentMethod]} />
         </Field>
+
+        {isCardMethod(selectedPaymentMethod) ? (
+          <Field>
+            <FieldLabel>Tarjeta</FieldLabel>
+            {cards.length > 0 ? (
+              <Select
+                value={selectedCardId ?? ""}
+                onValueChange={(value) => form.setValue("cardId", value ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona una tarjeta">
+                    {cards.find((c) => c.id === selectedCardId)?.name ?? "Selecciona una tarjeta"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {cards.map((card) => (
+                      <SelectItem key={card.id} value={card.id}>
+                        {card.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-600">
+                No hay tarjetas. Créalas en Finanzas para usar este método.
+              </p>
+            )}
+            <FieldDescription>
+              El gasto en tarjeta no descuenta el efectivo: queda como saldo por pagar de la tarjeta.
+            </FieldDescription>
+          </Field>
+        ) : null}
         </FieldGroup>
 
         <FormActions
@@ -514,6 +573,7 @@ function ExpenseTab(
             form.reset({
               ...props.lastEntry,
               budgetLineId: props.lastEntry.budgetLineId ?? "",
+              cardId: props.lastEntry.cardId ?? "",
             });
           }}
           submitLabel="Guardar gasto"
@@ -998,14 +1058,6 @@ function BudgetLineTab(
     control: form.control,
     name: "subcategoryId",
   });
-  const selectedPhase = useWatch({
-    control: form.control,
-    name: "phase",
-  });
-  const selectedArea = useWatch({
-    control: form.control,
-    name: "area",
-  });
   const quantity = useWatch({
     control: form.control,
     name: "quantity",
@@ -1035,10 +1087,6 @@ function BudgetLineTab(
     ],
   );
 
-  const availableVersions = useMemo(
-    () => props.budgetVersions.filter((version) => version.projectId === selectedProjectId),
-    [props.budgetVersions, selectedProjectId],
-  );
   const subcategoryOptions = useSubcategoryOptions(
     selectedCategoryId,
     props.subcategories,
@@ -1050,14 +1098,6 @@ function BudgetLineTab(
   const subcategorySelectOptions = useMemo(
     () => toEntityOptions(subcategoryOptions),
     [subcategoryOptions],
-  );
-  const phaseOptions = useMemo(
-    () => toSuggestionOptions(props.suggestionOptions, "phase"),
-    [props.suggestionOptions],
-  );
-  const areaOptions = useMemo(
-    () => toSuggestionOptions(props.suggestionOptions, "area"),
-    [props.suggestionOptions],
   );
   const computedTotal = Number(quantity ?? 0) * Number(unitPrice ?? 0);
   const preview = useMemo(
@@ -1150,30 +1190,6 @@ function BudgetLineTab(
         </Field>
         )}
 
-        <Field data-invalid={!!form.formState.errors.budgetVersionId}>
-          <FieldLabel>Version</FieldLabel>
-          <Select
-            value={selectedBudgetVersionId ?? ""}
-            onValueChange={(value) => form.setValue("budgetVersionId", value ?? "")}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecciona una version">
-                {availableVersions.find((v) => v.id === selectedBudgetVersionId)?.versionName ?? "Selecciona una version"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {availableVersions.map((version) => (
-                  <SelectItem key={version.id} value={version.id}>
-                    {version.versionName}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <FieldError errors={[form.formState.errors.budgetVersionId]} />
-        </Field>
-
         <Field data-invalid={!!form.formState.errors.categoryId}>
           <FieldLabel>Categoria</FieldLabel>
           <CreatableCombobox
@@ -1223,39 +1239,6 @@ function BudgetLineTab(
           <FieldLabel>Descripcion</FieldLabel>
           <Textarea rows={3} {...form.register("description")} />
           <FieldError errors={[form.formState.errors.description]} />
-        </Field>
-
-        <Field>
-          <FieldLabel>Fase</FieldLabel>
-          <CreatableCombobox
-            allowClear
-            clearLabel="Sin fase"
-            onChange={(value) => form.setValue("phase", value)}
-            onCreate={(query) => props.createSuggestionOption("phase", query)}
-            options={phaseOptions}
-            placeholder="Opcional"
-            searchPlaceholder="Buscar o crear fase"
-            value={selectedPhase ?? ""}
-          />
-        </Field>
-
-        <Field>
-          <FieldLabel>Area</FieldLabel>
-          <CreatableCombobox
-            allowClear
-            clearLabel="Sin area"
-            onChange={(value) => form.setValue("area", value)}
-            onCreate={(query) => props.createSuggestionOption("area", query)}
-            options={areaOptions}
-            placeholder="Opcional"
-            searchPlaceholder="Buscar o crear area"
-            value={selectedArea ?? ""}
-          />
-        </Field>
-
-        <Field>
-          <FieldLabel>Codigo</FieldLabel>
-          <Input {...form.register("lineCode")} />
         </Field>
 
         <Field data-invalid={!!form.formState.errors.quantity}>

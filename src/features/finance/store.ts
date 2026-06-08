@@ -65,6 +65,27 @@ import {
   type UpdateContractorInput,
   type UpdateProjectInput,
   type UpdateTransactionInput,
+  ensureProjectBudgetVersion,
+  createCard,
+  updateCard,
+  deleteCard,
+  createCardPayment,
+  createLoan,
+  updateLoan,
+  deleteLoan,
+  createLoanMovement,
+  deriveCompanyFinance,
+  deriveCardBalances,
+  deriveLoanBalances,
+  deriveAccountsReceivable,
+  deriveAccountsPayable,
+  deriveMonthlyMovements,
+  type CreateCardInput,
+  type UpdateCardInput,
+  type CreateCardPaymentInput,
+  type CreateLoanInput,
+  type UpdateLoanInput,
+  type CreateLoanMovementInput,
 } from "@/features/finance/ledger";
 import { createAppDataPersistence, type AppDataPersistence } from "@/features/finance/persistence";
 import { getStoreFilePath } from "@/features/finance/paths";
@@ -168,6 +189,7 @@ export function getReferenceData() {
     contractors: data.contractors,
     contracts: data.contractorContracts,
     suggestionOptions: data.suggestionOptions,
+    cards: data.cards,
     projectSummaries,
     budgetRows,
     contractorBalances,
@@ -314,8 +336,24 @@ export function saveIncome(input: CreateIncomeInput) {
   return structuredClone(next);
 }
 
+export function ensureProjectBudget(projectId: string) {
+  const data = cloneData();
+  const before = data.budgetVersions.length;
+  const version = ensureProjectBudgetVersion(data, projectId);
+  if (data.budgetVersions.length !== before) {
+    persistence.write(data);
+  }
+  return version.id;
+}
+
 export function saveBudgetLine(input: CreateBudgetLineInput) {
-  const next = createBudgetLine(cloneData(), input);
+  const data = cloneData();
+  // Flujo simple: asegurar el presupuesto del proyecto y usar su versión.
+  const version = ensureProjectBudgetVersion(data, input.projectId);
+  const next = createBudgetLine(data, {
+    ...input,
+    budgetVersionId: input.budgetVersionId || version.id,
+  });
   persistence.write(next);
   return structuredClone(next);
 }
@@ -473,4 +511,71 @@ export function editBudgetSection(input: UpdateBudgetSectionInput) {
   const next = updateBudgetSection(cloneData(), input);
   persistence.write(next);
   return next.budgetSections.find((s) => s.id === input.id) ?? null;
+}
+
+// ---------- Tarjetas (empresa) ----------
+
+export function saveCard(input: CreateCardInput) {
+  const next = createCard(cloneData(), input);
+  persistence.write(next);
+  return next.cards.at(-1) ?? null;
+}
+
+export function editCard(input: UpdateCardInput) {
+  const next = updateCard(cloneData(), input);
+  persistence.write(next);
+  return next.cards.find((c) => c.id === input.id) ?? null;
+}
+
+export function removeCard(cardId: string) {
+  const next = deleteCard(cloneData(), cardId);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
+export function saveCardPayment(input: CreateCardPaymentInput) {
+  const next = createCardPayment(cloneData(), input);
+  persistence.write(next);
+  return next.cardPayments.at(-1) ?? null;
+}
+
+// ---------- Préstamos (empresa) ----------
+
+export function saveLoan(input: CreateLoanInput) {
+  const next = createLoan(cloneData(), input);
+  persistence.write(next);
+  return next.loans.at(-1) ?? null;
+}
+
+export function editLoan(input: UpdateLoanInput) {
+  const next = updateLoan(cloneData(), input);
+  persistence.write(next);
+  return next.loans.find((l) => l.id === input.id) ?? null;
+}
+
+export function removeLoan(loanId: string) {
+  const next = deleteLoan(cloneData(), loanId);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
+export function saveLoanMovement(input: CreateLoanMovementInput) {
+  const next = createLoanMovement(cloneData(), input);
+  persistence.write(next);
+  return next.loanMovements.at(-1) ?? null;
+}
+
+// ---------- Finanzas (empresa) ----------
+
+export function getCompanyFinanceSnapshot() {
+  const data = cloneData();
+  return {
+    summary: deriveCompanyFinance(data),
+    cards: deriveCardBalances(data),
+    loans: deriveLoanBalances(data),
+    receivable: deriveAccountsReceivable(data),
+    payable: deriveAccountsPayable(data),
+    monthlyMovements: deriveMonthlyMovements(data),
+    projects: data.projects,
+  };
 }

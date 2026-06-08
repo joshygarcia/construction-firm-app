@@ -7,10 +7,10 @@ import {
   BanknoteIcon,
   BarChart3Icon,
   Building2Icon,
-  CalendarIcon,
   ClipboardListIcon,
   CreditCardIcon,
   FileTextIcon,
+  LineChartIcon,
   Settings2Icon,
 } from "lucide-react";
 
@@ -34,13 +34,12 @@ import {
 function getNavItems(projectId: string) {
   return [
     { href: `/projects/${projectId}`, label: "Panel", icon: BarChart3Icon, exact: true },
-    { href: `/projects/${projectId}/income`, label: "Ingresos", icon: BanknoteIcon },
     { href: `/projects/${projectId}/transactions`, label: "Movimientos", icon: CreditCardIcon },
-    { href: `/projects/${projectId}/calendario`, label: "Calendario", icon: CalendarIcon },
-    { href: `/projects/${projectId}/budgets`, label: "Presupuestos", icon: ClipboardListIcon },
+    { href: `/projects/${projectId}/budgets`, label: "Presupuesto", icon: ClipboardListIcon },
     { href: `/projects/${projectId}/contractors`, label: "Contratistas", icon: Building2Icon },
-    { href: `/projects/${projectId}/invoices`, label: "Facturas", icon: FileTextIcon },
-    { href: `/projects/${projectId}/reports`, label: "Reportes", icon: BarChart3Icon },
+    { href: `/projects/${projectId}/invoices`, label: "Facturas y recibos", icon: FileTextIcon },
+    { href: `/projects/${projectId}/reports`, label: "Reportes", icon: LineChartIcon },
+    { href: "/finanzas", label: "Finanzas", icon: BanknoteIcon },
     { href: "/settings", label: "Ajustes", icon: Settings2Icon },
   ];
 }

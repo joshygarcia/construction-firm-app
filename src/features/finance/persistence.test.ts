@@ -32,6 +32,10 @@ function buildFixture(): AppData {
     contractorPayments: [],
     suggestionOptions: [],
     invoices: [],
+    cards: [],
+    cardPayments: [],
+    loans: [],
+    loanMovements: [],
   };
 }
 

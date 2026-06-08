@@ -26,6 +26,10 @@ function normalizeAppData(data: AppData, seedData: AppData) {
     contractorPayments: data.contractorPayments ?? seedData.contractorPayments,
     suggestionOptions: data.suggestionOptions ?? seedData.suggestionOptions ?? [],
     invoices: data.invoices ?? [],
+    cards: data.cards ?? [],
+    cardPayments: data.cardPayments ?? [],
+    loans: data.loans ?? [],
+    loanMovements: data.loanMovements ?? [],
   } satisfies AppData;
 }
 
@@ -41,7 +45,11 @@ function hasLegacyGaps(data: Partial<AppData>) {
     data.transactions === undefined ||
     data.contractorPayments === undefined ||
     data.suggestionOptions === undefined ||
-    data.invoices === undefined
+    data.invoices === undefined ||
+    data.cards === undefined ||
+    data.cardPayments === undefined ||
+    data.loans === undefined ||
+    data.loanMovements === undefined
   );
 }
 

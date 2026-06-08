@@ -1,5 +1,6 @@
 import { QuickEntryPanel } from "@/features/finance/components/quick-entry-panel";
 import { TransactionsTable } from "@/features/finance/components/transactions-table";
+import { TransactionsCalendar } from "@/components/projects/transactions-calendar";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,9 +60,11 @@ export default async function ProjectTransactionsPage({
         </div>
 
         <QuickEntryPanel
+          availableModes={["expense", "income", "contractor_payment"]}
           budgetLines={reference.budgetLines}
           budgetRows={reference.budgetRows}
           budgetVersions={reference.budgetVersions}
+          cards={reference.cards}
           categories={reference.categories}
           contractorBalances={reference.contractorBalances}
           contractors={reference.contractors}
@@ -80,6 +83,24 @@ export default async function ProjectTransactionsPage({
           </CardHeader>
           <CardContent>
             <TransactionsTable transactions={snapshot.transactions} />
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle>Calendario de movimientos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TransactionsCalendar
+              transactions={snapshot.transactions.map((item) => ({
+                id: item.id,
+                transactionDate: item.transactionDate,
+                amount: item.amount,
+                detail: item.detail,
+                transactionType: item.transactionType,
+                payeeOrSource: item.payeeOrSource,
+              }))}
+            />
           </CardContent>
         </Card>
       </div>

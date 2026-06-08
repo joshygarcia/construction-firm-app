@@ -279,6 +279,7 @@ export function ExcelImportPanel({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Código</TableHead>
+                    <TableHead>Sección</TableHead>
                     <TableHead>Descripción</TableHead>
                     <TableHead>Cant.</TableHead>
                     <TableHead>Unidad</TableHead>
@@ -290,7 +291,17 @@ export function ExcelImportPanel({
                   {preview.budgetLines.slice(0, 50).map((bl, i) => (
                     <TableRow key={i}>
                       <TableCell>{bl.lineCode || "—"}</TableCell>
-                      <TableCell className="max-w-48 truncate">{bl.description}</TableCell>
+                      <TableCell className="max-w-40 truncate text-muted-foreground">
+                        {bl.sectionName || bl.categoryName || "—"}
+                      </TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {bl.description}
+                        {(bl.phase || bl.area) && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            {[bl.phase, bl.area].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>{bl.quantity}</TableCell>
                       <TableCell>{bl.unit}</TableCell>
                       <TableCell className="text-right font-mono">
@@ -303,7 +314,7 @@ export function ExcelImportPanel({
                   ))}
                   {totalBudgetLines > 50 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
                         ...y {totalBudgetLines - 50} filas más
                       </TableCell>
                     </TableRow>

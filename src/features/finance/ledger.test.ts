@@ -1,12 +1,24 @@
 import {
+  createBudgetLine,
+  createCard,
+  createCardPayment,
   createCategory,
   createContractorPayment,
   createExpense,
+  createInvoice,
+  createLoan,
+  createLoanMovement,
+  createProject,
   createSubcategory,
+  deriveAccountsReceivable,
   deriveBudgetVsActual,
+  deriveCardBalances,
   deriveCashflow,
+  deriveCompanyFinance,
   deriveContractorBalances,
+  deriveLoanBalances,
   deriveProjectSummary,
+  updateInvoiceStatus,
   upsertSuggestionOption,
   type AppData,
 } from "@/features/finance/ledger";
@@ -125,6 +137,7 @@ function buildFixture(): AppData {
         detail: "Avance 1 plomero",
         payeeOrSource: "Plomero Juan",
         paymentMethod: "transferencia",
+        cardId: null,
         externalReference: "",
         contractorContractId: "contract-1",
         receiptPath: null,
@@ -143,6 +156,7 @@ function buildFixture(): AppData {
         detail: "Desembolso 1",
         payeeOrSource: "Cliente",
         paymentMethod: "deposito",
+        cardId: null,
         externalReference: "",
         contractorContractId: null,
         receiptPath: null,
@@ -162,6 +176,10 @@ function buildFixture(): AppData {
     ],
     suggestionOptions: [],
     invoices: [],
+    cards: [],
+    cardPayments: [],
+    loans: [],
+    loanMovements: [],
   };
 }
 
@@ -302,5 +320,122 @@ describe("ledger mutations", () => {
         pendingBalance: 20000,
       }),
     );
+  });
+});
+
+describe("presupuesto simplificado", () => {
+  it("autocrea el presupuesto al crear el proyecto y las partidas cuentan de inmediato", () => {
+    const withProject = createProject(buildFixture(), {
+      name: "Nuevo Proyecto",
+      clientName: "Cliente",
+      location: "Santiago",
+      startDate: "2026-01-01",
+    });
+    const project = withProject.projects.at(-1)!;
+    const version = withProject.budgetVersions.find(
+      (v) => v.projectId === project.id,
+    );
+
+    expect(version).toBeTruthy();
+
+    const withLine = createBudgetLine(withProject, {
+      projectId: project.id,
+      budgetVersionId: version!.id,
+      categoryId: "cat-plomeria",
+      subcategoryId: null,
+      description: "Partida de prueba",
+      quantity: 2,
+      unit: "u",
+      unitPrice: 1000,
+    });
+
+    const budgeted = deriveBudgetVsActual(withLine, project.id).reduce(
+      (sum, row) => sum + row.budgeted,
+      0,
+    );
+    expect(budgeted).toBe(2000);
+  });
+});
+
+describe("tarjetas como cuentas por pagar", () => {
+  it("un gasto con tarjeta sube el saldo de la tarjeta y NO reduce la caja", () => {
+    const withCard = createCard(buildFixture(), { name: "Visa Popular" });
+    const card = withCard.cards.at(-1)!;
+
+    const before = deriveProjectSummary(withCard, "project-1");
+    const withCharge = createExpense(withCard, {
+      projectId: "project-1",
+      transactionDate: "2026-03-15",
+      categoryId: "cat-plomeria",
+      subcategoryId: "sub-plomero",
+      amount: 5000,
+      detail: "Compra de materiales",
+      payeeOrSource: "Ferreteria",
+      paymentMethod: "tarjeta",
+      cardId: card.id,
+    });
+    const after = deriveProjectSummary(withCharge, "project-1");
+
+    expect(deriveCardBalances(withCharge)[0].balance).toBe(5000);
+    // La caja no cambia con un gasto en tarjeta...
+    expect(after.cashAvailable).toBe(before.cashAvailable);
+    // ...pero el costo total sí sube (consume presupuesto).
+    expect(after.totalExpenses).toBe(before.totalExpenses + 5000);
+
+    // Pagar la tarjeta baja su saldo y baja la caja de la empresa.
+    const cashBefore = deriveCompanyFinance(withCharge).cash;
+    const withPay = createCardPayment(withCharge, {
+      cardId: card.id,
+      date: "2026-03-20",
+      amount: 2000,
+    });
+    expect(deriveCardBalances(withPay)[0].balance).toBe(3000);
+    expect(deriveCompanyFinance(withPay).cash).toBe(cashBefore - 2000);
+  });
+});
+
+describe("préstamos recibidos", () => {
+  it("recibir sube caja y saldo; abonar baja ambos", () => {
+    const withLoan = createLoan(buildFixture(), { name: "Banco Popular" });
+    const loan = withLoan.loans.at(-1)!;
+    const cashBase = deriveCompanyFinance(withLoan).cash;
+
+    const received = createLoanMovement(withLoan, {
+      loanId: loan.id,
+      type: "disbursement",
+      date: "2026-03-01",
+      amount: 100000,
+    });
+    expect(deriveLoanBalances(received)[0].balance).toBe(100000);
+    expect(deriveCompanyFinance(received).cash).toBe(cashBase + 100000);
+
+    const repaid = createLoanMovement(received, {
+      loanId: loan.id,
+      type: "payment",
+      date: "2026-04-01",
+      amount: 30000,
+    });
+    expect(deriveLoanBalances(repaid)[0].balance).toBe(70000);
+    expect(deriveCompanyFinance(repaid).cash).toBe(cashBase + 100000 - 30000);
+  });
+});
+
+describe("cuentas por cobrar", () => {
+  it("una factura emitida (sent) suma a las cuentas por cobrar", () => {
+    const withInvoice = createInvoice(buildFixture(), {
+      projectId: "project-1",
+      recipientName: "Cliente Tigaiga",
+      issueDate: "2026-03-01",
+      lineItems: [
+        { description: "Servicio", quantity: 1, unitPrice: 50000, total: 50000 },
+      ],
+    });
+    const invoice = withInvoice.invoices.at(-1)!;
+
+    // En borrador no es cuenta por cobrar.
+    expect(deriveAccountsReceivable(withInvoice).total).toBe(0);
+
+    const sent = updateInvoiceStatus(withInvoice, invoice.id, "sent");
+    expect(deriveAccountsReceivable(sent).total).toBe(50000);
   });
 });

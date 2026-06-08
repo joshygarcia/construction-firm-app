@@ -376,7 +376,7 @@ export const seedData: AppData = {
       categoryId: null, subcategoryId: null, transactionType: "income",
       transactionDate: "2025-07-01", amount: 120000,
       detail: "Desembolso inicial — planos", payeeOrSource: "Cliente Tigaiga",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -384,7 +384,7 @@ export const seedData: AppData = {
       categoryId: null, subcategoryId: null, transactionType: "income",
       transactionDate: "2025-11-21", amount: 144700,
       detail: "Desembolso — estudio de suelo, imp. ayunt.", payeeOrSource: "Cliente Tigaiga",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -392,7 +392,7 @@ export const seedData: AppData = {
       categoryId: null, subcategoryId: null, transactionType: "income",
       transactionDate: "2026-01-06", amount: 2000000,
       detail: "Avance 1 — DEPOSITO BANRESERVA", payeeOrSource: "Cliente Tigaiga",
-      paymentMethod: "depósito bancario", externalReference: "", contractorContractId: null,
+      paymentMethod: "depósito bancario", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -400,7 +400,7 @@ export const seedData: AppData = {
       categoryId: null, subcategoryId: null, transactionType: "income",
       transactionDate: "2026-03-12", amount: 2000000,
       detail: "Avance 2 — DEPOSITO SANTA CRUZ", payeeOrSource: "Cliente Tigaiga",
-      paymentMethod: "depósito bancario", externalReference: "", contractorContractId: null,
+      paymentMethod: "depósito bancario", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     // --- GASTOS ---
@@ -409,7 +409,7 @@ export const seedData: AppData = {
       categoryId: "cat-permisologia", subcategoryId: "sub-carta-no-objecion", transactionType: "expense",
       transactionDate: "2025-07-14", amount: 1000,
       detail: "PAGO CARTA", payeeOrSource: "MOPC",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -417,7 +417,7 @@ export const seedData: AppData = {
       categoryId: "cat-diseno", subcategoryId: "sub-diseno-arq", transactionType: "expense",
       transactionDate: "2025-07-19", amount: 100000,
       detail: "AVANCE diseño arquitectónico", payeeOrSource: "Ana María",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -425,7 +425,7 @@ export const seedData: AppData = {
       categoryId: "cat-permisologia", subcategoryId: "sub-pago-carta", transactionType: "expense",
       transactionDate: "2025-08-12", amount: 25000,
       detail: "PAGO CARTA NO OBJECCION", payeeOrSource: "MOPC",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -433,7 +433,7 @@ export const seedData: AppData = {
       categoryId: "cat-diseno", subcategoryId: "sub-calculo-sanitario", transactionType: "expense",
       transactionDate: "2025-09-15", amount: 25000,
       detail: "AVANCE cálculo sanitario", payeeOrSource: "Ingeniero",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -441,7 +441,7 @@ export const seedData: AppData = {
       categoryId: "cat-permisologia", subcategoryId: "sub-imp-ayuntamiento", transactionType: "expense",
       transactionDate: "2026-01-09", amount: 40700,
       detail: "PAGO IMPUESTO AYUNTAMIENTO", payeeOrSource: "Ayuntamiento Santiago",
-      paymentMethod: "tarjeta", externalReference: "", contractorContractId: null,
+      paymentMethod: "tarjeta", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -449,7 +449,7 @@ export const seedData: AppData = {
       categoryId: "cat-solar", subcategoryId: "sub-movimiento-tierra", transactionType: "expense",
       transactionDate: "2026-01-14", amount: 37500,
       detail: "CORTE", payeeOrSource: "Maquinista",
-      paymentMethod: "efectivo", externalReference: "", contractorContractId: null,
+      paymentMethod: "efectivo", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -457,7 +457,7 @@ export const seedData: AppData = {
       categoryId: "cat-solar", subcategoryId: "sub-bote", transactionType: "expense",
       transactionDate: "2026-01-14", amount: 85500,
       detail: "BOTE de material", payeeOrSource: "Camiones",
-      paymentMethod: "efectivo", externalReference: "", contractorContractId: null,
+      paymentMethod: "efectivo", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -465,7 +465,7 @@ export const seedData: AppData = {
       categoryId: "cat-solar", subcategoryId: "sub-cisterna", transactionType: "expense",
       transactionDate: "2026-01-14", amount: 69485,
       detail: "MATERIALES FERRETERIA DORADO", payeeOrSource: "Ferretería Dorado",
-      paymentMethod: "tarjeta", externalReference: "", contractorContractId: null,
+      paymentMethod: "tarjeta", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -473,7 +473,7 @@ export const seedData: AppData = {
       categoryId: "cat-costos-indirectos", subcategoryId: "sub-gasto-administrativo", transactionType: "expense",
       transactionDate: "2026-01-08", amount: 140000,
       detail: "Gasto administrativo enero", payeeOrSource: "Oficina",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -481,7 +481,7 @@ export const seedData: AppData = {
       categoryId: "cat-costos-indirectos", subcategoryId: "sub-personal-fijo", transactionType: "expense",
       transactionDate: "2026-01-08", amount: 100000,
       detail: "Personal en obra enero", payeeOrSource: "Nómina",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -489,7 +489,7 @@ export const seedData: AppData = {
       categoryId: "cat-hormigon-armado", subcategoryId: "sub-zapatas-columnas-mat", transactionType: "expense",
       transactionDate: "2026-02-12", amount: 198000,
       detail: "VARILLA Y CEMENTO", payeeOrSource: "Ferretería Dorado",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -497,7 +497,7 @@ export const seedData: AppData = {
       categoryId: "cat-hormigon-armado", subcategoryId: "sub-muros-materiales", transactionType: "expense",
       transactionDate: "2026-02-12", amount: 22303,
       detail: "400 BLOCK DE 8", payeeOrSource: "Bloquera",
-      paymentMethod: "efectivo", externalReference: "", contractorContractId: null,
+      paymentMethod: "efectivo", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -505,7 +505,7 @@ export const seedData: AppData = {
       categoryId: "cat-hormigon-armado", subcategoryId: "sub-materiales-losa", transactionType: "expense",
       transactionDate: "2026-03-25", amount: 107871,
       detail: "VARILLAS para losa", payeeOrSource: "Ferretería Dorado",
-      paymentMethod: "transferencia", externalReference: "", contractorContractId: null,
+      paymentMethod: "transferencia", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -513,7 +513,7 @@ export const seedData: AppData = {
       categoryId: "cat-plomeria", subcategoryId: "sub-plomeria-mat", transactionType: "expense",
       transactionDate: "2026-03-14", amount: 25275,
       detail: "MATERIALES plomería", payeeOrSource: "Ferretería Central",
-      paymentMethod: "efectivo", externalReference: "", contractorContractId: null,
+      paymentMethod: "efectivo", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
     {
@@ -521,7 +521,7 @@ export const seedData: AppData = {
       categoryId: "cat-electricidad", subcategoryId: "sub-electricidad-mat", transactionType: "expense",
       transactionDate: "2026-03-14", amount: 10730,
       detail: "MATERIALES eléctricos", payeeOrSource: "Electrical Supply",
-      paymentMethod: "tarjeta", externalReference: "", contractorContractId: null,
+      paymentMethod: "tarjeta", cardId: null, externalReference: "", contractorContractId: null,
       createdBy: "user-admin", receiptPath: null, deletedAt: null,
     },
   ],
@@ -547,6 +547,10 @@ export const seedData: AppData = {
     { id: "sug-pm-5", kind: "payment_method", value: "depósito bancario", normalizedValue: "depósito bancario", createdAt: "2025-07-01T09:00:00.000Z" },
   ],
   invoices: [],
+  cards: [],
+  cardPayments: [],
+  loans: [],
+  loanMovements: [],
 };
 
 /**
@@ -569,6 +573,10 @@ export function getInitialSeed(): AppData {
       transactions: [],
       contractorPayments: [],
       invoices: [],
+      cards: [],
+      cardPayments: [],
+      loans: [],
+      loanMovements: [],
     };
   }
   return seedData;

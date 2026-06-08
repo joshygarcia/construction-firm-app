@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2Icon } from "lucide-react";
+import { ReceiptTextIcon, Trash2Icon } from "lucide-react";
 
 import { submitDeleteTransaction } from "@/features/finance/actions";
 import { EditTransactionDialog } from "@/features/finance/components/edit-transaction-dialog";
@@ -93,6 +93,16 @@ export function TransactionsTable({
               </TableCell>
               <TableCell>
                 <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Recibo PDF"
+                    onClick={() =>
+                      window.open(`/api/export/receipt/${transaction.id}`, "_blank")
+                    }
+                  >
+                    <ReceiptTextIcon />
+                  </Button>
                   <EditTransactionDialog transaction={transaction} />
                   <ConfirmDialog
                     title="Eliminar movimiento"

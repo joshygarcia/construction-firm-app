@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -8,6 +8,8 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // No correr tests de copias empaquetadas del código (build artifacts).
+    exclude: [...configDefaults.exclude, "**/dist-electron/**", "**/.next/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
