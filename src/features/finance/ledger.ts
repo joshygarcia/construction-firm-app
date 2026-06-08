@@ -1617,11 +1617,6 @@ export function updateBudgetLine(data: AppData, input: UpdateBudgetLineInput): A
     throw new Error("Línea presupuestaria no encontrada.");
   }
 
-  const version = next.budgetVersions.find((item) => item.id === line.budgetVersionId);
-  if (version?.isLocked) {
-    throw new Error("La versión aprobada no puede editarse.");
-  }
-
   if (input.categoryId) {
     requireCategory(next, input.categoryId);
     requireSubcategory(next, input.categoryId, input.subcategoryId);
@@ -1629,9 +1624,11 @@ export function updateBudgetLine(data: AppData, input: UpdateBudgetLineInput): A
 
   line.categoryId = input.categoryId;
   line.subcategoryId = input.subcategoryId;
-  line.phase = input.phase ?? null;
-  line.area = input.area ?? null;
-  line.lineCode = input.lineCode ?? null;
+  // Preservar campos no enviados (ediciones parciales desde el grid).
+  if (input.phase !== undefined) line.phase = input.phase;
+  if (input.area !== undefined) line.area = input.area;
+  if (input.lineCode !== undefined) line.lineCode = input.lineCode;
+  if (input.notes !== undefined) line.notes = input.notes.trim();
   line.description = input.description.trim();
   line.quantity = input.quantity ?? null;
   line.unit = input.unit ?? null;
@@ -1640,7 +1637,6 @@ export function updateBudgetLine(data: AppData, input: UpdateBudgetLineInput): A
   line.totalBudgeted =
     input.totalBudgeted ??
     (input.quantity && input.unitPrice ? input.quantity * input.unitPrice : 0);
-  line.notes = input.notes?.trim() ?? "";
 
   return next;
 }
@@ -1651,11 +1647,6 @@ export function deleteBudgetLine(data: AppData, budgetLineId: string): AppData {
 
   if (!line) {
     throw new Error("Línea presupuestaria no encontrada.");
-  }
-
-  const version = next.budgetVersions.find((item) => item.id === line.budgetVersionId);
-  if (version?.isLocked) {
-    throw new Error("La versión aprobada no puede editarse.");
   }
 
   next.budgetLines = next.budgetLines.filter((item) => item.id !== budgetLineId);

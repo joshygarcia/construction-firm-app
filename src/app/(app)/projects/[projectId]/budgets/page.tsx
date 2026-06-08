@@ -27,6 +27,7 @@ export default async function ProjectBudgetsPage({
     id: l.id,
     categoryId: l.categoryId,
     subcategoryId: l.subcategoryId,
+    area: l.area,
     description: l.description,
     quantity: l.quantity,
     unit: l.unit,
@@ -35,6 +36,16 @@ export default async function ProjectBudgetsPage({
     isManualTotal: l.isManualTotal,
     paid: advanceMap.get(l.id) ?? 0,
   }));
+
+  // Niveles existentes (de las partidas) + sugerencias guardadas.
+  const nivelSet = new Set<string>();
+  for (const l of overview.budgetLines) {
+    if (l.area && l.area.trim()) nivelSet.add(l.area.trim());
+  }
+  for (const s of reference.suggestionOptions) {
+    if (s.kind === "area" && s.value.trim()) nivelSet.add(s.value.trim());
+  }
+  const niveles = [...nivelSet];
 
   const totalBudget = lines.reduce((s, l) => s + l.totalBudgeted, 0);
   const totalPaid = overview.budgetAdvances.reduce((s, a) => s + a.totalPaid, 0);
@@ -99,6 +110,7 @@ export default async function ProjectBudgetsPage({
           projectId={projectId}
           categories={categories}
           subcategories={subcategories}
+          niveles={niveles}
           lines={lines}
         />
       </div>

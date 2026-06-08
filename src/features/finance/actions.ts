@@ -398,6 +398,7 @@ export async function submitBudgetGridLine(input: {
   projectId: string;
   categoryId: string;
   subcategoryId?: string | null;
+  area?: string | null;
   description: string;
   quantity: number;
   unit: string;
@@ -417,6 +418,7 @@ export async function submitBudgetGridLine(input: {
       budgetVersionId: "",
       categoryId: input.categoryId,
       subcategoryId: input.subcategoryId ?? null,
+      area: input.area?.trim() || null,
       description,
       quantity,
       unit: (input.unit ?? "").trim() || "ud",

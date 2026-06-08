@@ -28,7 +28,9 @@ export async function GET(
   }
 
   const data = getAppData();
-  const { project, budgetSections, budgetLines } = overview;
+  const { project, budgetLines } = overview;
+  const catName = new Map(data.categories.map((c) => [c.id, c.name]));
+  const subName = new Map(data.subcategories.map((s) => [s.id, s.name]));
 
   const doc = new jsPDF();
   doc.setFont("helvetica");
@@ -43,175 +45,109 @@ export async function GET(
   doc.setFontSize(9);
   doc.text(`Fecha: ${new Date().toLocaleDateString("es-DO")}`, 14, 43);
 
-  // Build table data grouped by section
-  const tableHead = [
-    ["Codigo", "Descripcion", "Cant.", "Und.", "P.U.", "Presupuestado", "Pagado", "Restante"],
+  // Tabla agrupada por Nivel -> Categoría -> Subcategoría
+  const tableHead = [["Descripcion", "Cant.", "Und.", "P.U.", "Presupuestado"]];
+
+  type Cell = string | { content: string; colSpan?: number; styles?: Record<string, unknown> };
+  const tableBody: Cell[][] = [];
+
+  const nivelOf = (area: string | null) => (area && area.trim() ? area.trim() : null);
+  const hasNiveles = budgetLines.some((l) => nivelOf(l.area) !== null);
+
+  const lineRow = (line: (typeof budgetLines)[number]): Cell[] => [
+    line.description,
+    fmtNumber(line.quantity),
+    line.unit ?? "",
+    line.unitPrice !== null ? fmtCurrency(line.unitPrice) : "",
+    fmtCurrency(line.totalBudgeted),
   ];
 
-  const tableBody: (string | { content: string; colSpan?: number; styles?: Record<string, unknown> })[][] = [];
+  const subtotalRow = (label: string, b: number, styles: Record<string, unknown>): Cell[] => [
+    { content: label, colSpan: 4, styles },
+    { content: fmtCurrency(b), styles },
+  ];
 
-  // Group lines by section
-  const sectionMap = new Map(budgetSections.map((s) => [s.id, s]));
-
-  // Build a map: sectionId -> lines
-  const linesBySection = new Map<string | null, typeof budgetLines>();
-  for (const line of budgetLines) {
-    const key = line.sectionId;
-    if (!linesBySection.has(key)) {
-      linesBySection.set(key, []);
+  // Orden de niveles por aparición.
+  const nivelOrder: (string | null)[] = [];
+  const seenNivel = new Set<string>();
+  for (const l of budgetLines) {
+    const n = nivelOf(l.area);
+    const key = n ?? "__none";
+    if (!seenNivel.has(key)) {
+      seenNivel.add(key);
+      nivelOrder.push(n);
     }
-    linesBySection.get(key)!.push(line);
   }
 
-  // Calculate paid amounts per budget line from transactions
-  const paidByBudgetLine = new Map<string, number>();
-  for (const txn of overview.transactions) {
-    if (txn.transactionType === "expense" && txn.budgetLineId) {
-      paidByBudgetLine.set(
-        txn.budgetLineId,
-        (paidByBudgetLine.get(txn.budgetLineId) ?? 0) + txn.amount,
-      );
+  const catOrder = [...data.categories.map((c) => c.id), "__nocat"];
+
+  function renderCategory(catId: string | null, catLines: (typeof budgetLines)): number {
+    tableBody.push([
+      { content: catId ? catName.get(catId) ?? "Sin categoría" : "Sin categoría", colSpan: 5, styles: { fontStyle: "bold", fillColor: [235, 235, 235] } },
+    ]);
+
+    const bySub = new Map<string, typeof budgetLines>();
+    for (const l of catLines) {
+      const k = l.subcategoryId ?? "__nosub";
+      if (!bySub.has(k)) bySub.set(k, []);
+      bySub.get(k)!.push(l);
     }
+    const subOrder = [
+      ...data.subcategories.filter((s) => s.categoryId === catId).map((s) => s.id),
+      "__nosub",
+    ].filter((id) => bySub.has(id));
+    const onlyNoSub = subOrder.length === 1 && subOrder[0] === "__nosub";
+
+    let cb = 0;
+    for (const subId of subOrder) {
+      const subLines = bySub.get(subId)!;
+      const subLabel = subId === "__nosub" ? "Sin subcategoría" : subName.get(subId) ?? "";
+      if (!onlyNoSub) {
+        tableBody.push([{ content: `   ${subLabel}`, colSpan: 5, styles: { fontStyle: "italic", textColor: [140, 90, 40] } }]);
+      }
+      let sb = 0;
+      for (const line of subLines) {
+        sb += line.totalBudgeted;
+        tableBody.push(lineRow(line));
+      }
+      if (!onlyNoSub) {
+        tableBody.push(subtotalRow(`   Subtotal ${subLabel}`, sb, { fontStyle: "italic" }));
+      }
+      cb += sb;
+    }
+
+    tableBody.push(subtotalRow(`Subtotal ${catId ? catName.get(catId) ?? "Sin categoría" : "Sin categoría"}`, cb, { fontStyle: "bold" }));
+    return cb;
   }
 
   let grandBudgeted = 0;
-  let grandPaid = 0;
-  let directTotal = 0;
-  let indirectTotal = 0;
 
-  // Sort sections by sortOrder
-  const sortedSections = [...budgetSections].sort((a, b) => a.sortOrder - b.sortOrder);
-
-  for (const section of sortedSections) {
-    const lines = linesBySection.get(section.id) ?? [];
-    if (lines.length === 0) continue;
-
-    // Section header row
-    tableBody.push([
-      {
-        content: `${section.code} - ${section.name}`,
-        colSpan: 8,
-        styles: { fontStyle: "bold", fillColor: [230, 230, 230] },
-      },
-    ]);
-
-    let sectionBudgeted = 0;
-    let sectionPaid = 0;
-
-    const sortedLines = [...lines].sort((a, b) => a.sortOrder - b.sortOrder);
-
-    for (const line of sortedLines) {
-      const paid = paidByBudgetLine.get(line.id) ?? 0;
-      const remaining = line.totalBudgeted - paid;
-      sectionBudgeted += line.totalBudgeted;
-      sectionPaid += paid;
-
+  for (const nivel of nivelOrder) {
+    const nivelLines = budgetLines.filter((l) => nivelOf(l.area) === nivel);
+    if (hasNiveles) {
       tableBody.push([
-        line.lineCode ?? "",
-        line.description,
-        fmtNumber(line.quantity),
-        line.unit ?? "",
-        line.unitPrice !== null ? fmtCurrency(line.unitPrice) : "",
-        fmtCurrency(line.totalBudgeted),
-        fmtCurrency(paid),
-        fmtCurrency(remaining),
+        { content: nivel ?? "Sin nivel", colSpan: 5, styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] } },
       ]);
     }
-
-    // Section subtotal
-    const sectionRemaining = sectionBudgeted - sectionPaid;
-    tableBody.push([
-      {
-        content: `Subtotal ${section.name}`,
-        colSpan: 5,
-        styles: { fontStyle: "bold" },
-      },
-      { content: fmtCurrency(sectionBudgeted), styles: { fontStyle: "bold" } },
-      { content: fmtCurrency(sectionPaid), styles: { fontStyle: "bold" } },
-      { content: fmtCurrency(sectionRemaining), styles: { fontStyle: "bold" } },
-    ]);
-
-    grandBudgeted += sectionBudgeted;
-    grandPaid += sectionPaid;
-
-    if (section.costType === "direct") {
-      directTotal += sectionBudgeted;
-    } else {
-      indirectTotal += sectionBudgeted;
+    const byCat = new Map<string, typeof budgetLines>();
+    for (const l of nivelLines) {
+      const k = l.categoryId ?? "__nocat";
+      if (!byCat.has(k)) byCat.set(k, []);
+      byCat.get(k)!.push(l);
     }
+    let nb = 0;
+    for (const catKey of catOrder.filter((id) => byCat.has(id))) {
+      nb += renderCategory(catKey === "__nocat" ? null : catKey, byCat.get(catKey)!);
+    }
+    if (hasNiveles) {
+      tableBody.push(subtotalRow(`Subtotal ${nivel ?? "Sin nivel"}`, nb, { fontStyle: "bold", fillColor: [245, 235, 225] }));
+    }
+    grandBudgeted += nb;
   }
 
-  // Handle lines without a section
-  const unsectionedLines = linesBySection.get(null) ?? [];
-  if (unsectionedLines.length > 0) {
-    tableBody.push([
-      {
-        content: "Sin seccion",
-        colSpan: 8,
-        styles: { fontStyle: "bold", fillColor: [230, 230, 230] },
-      },
-    ]);
-
-    let unsectionedBudgeted = 0;
-    let unsectionedPaid = 0;
-
-    for (const line of unsectionedLines) {
-      const paid = paidByBudgetLine.get(line.id) ?? 0;
-      const remaining = line.totalBudgeted - paid;
-      unsectionedBudgeted += line.totalBudgeted;
-      unsectionedPaid += paid;
-
-      tableBody.push([
-        line.lineCode ?? "",
-        line.description,
-        fmtNumber(line.quantity),
-        line.unit ?? "",
-        line.unitPrice !== null ? fmtCurrency(line.unitPrice) : "",
-        fmtCurrency(line.totalBudgeted),
-        fmtCurrency(paid),
-        fmtCurrency(remaining),
-      ]);
-    }
-
-    grandBudgeted += unsectionedBudgeted;
-    grandPaid += unsectionedPaid;
-    directTotal += unsectionedBudgeted;
-  }
-
-  // Grand totals
-  const grandRemaining = grandBudgeted - grandPaid;
-
   tableBody.push([
-    {
-      content: `Costos Directos`,
-      colSpan: 5,
-      styles: { fontStyle: "bold", fillColor: [200, 200, 200] },
-    },
-    { content: fmtCurrency(directTotal), styles: { fontStyle: "bold", fillColor: [200, 200, 200] } },
-    { content: "", styles: { fillColor: [200, 200, 200] } },
-    { content: "", styles: { fillColor: [200, 200, 200] } },
-  ]);
-
-  tableBody.push([
-    {
-      content: `Costos Indirectos`,
-      colSpan: 5,
-      styles: { fontStyle: "bold", fillColor: [200, 200, 200] },
-    },
-    { content: fmtCurrency(indirectTotal), styles: { fontStyle: "bold", fillColor: [200, 200, 200] } },
-    { content: "", styles: { fillColor: [200, 200, 200] } },
-    { content: "", styles: { fillColor: [200, 200, 200] } },
-  ]);
-
-  tableBody.push([
-    {
-      content: "TOTAL GENERAL",
-      colSpan: 5,
-      styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] },
-    },
+    { content: "TOTAL GENERAL", colSpan: 4, styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] } },
     { content: fmtCurrency(grandBudgeted), styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] } },
-    { content: fmtCurrency(grandPaid), styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] } },
-    { content: fmtCurrency(grandRemaining), styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] } },
   ]);
 
   autoTable(doc, {
@@ -219,17 +155,14 @@ export async function GET(
     head: tableHead,
     body: tableBody,
     theme: "grid",
-    styles: { fontSize: 7, cellPadding: 2 },
+    styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [180, 120, 60], textColor: [255, 255, 255], fontStyle: "bold" },
     columnStyles: {
-      0: { cellWidth: 18 },
-      1: { cellWidth: 42 },
-      2: { cellWidth: 14, halign: "right" },
-      3: { cellWidth: 12 },
-      4: { cellWidth: 22, halign: "right" },
-      5: { cellWidth: 26, halign: "right" },
-      6: { cellWidth: 26, halign: "right" },
-      7: { cellWidth: 26, halign: "right" },
+      0: { cellWidth: 88 },
+      1: { cellWidth: 18, halign: "right" },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 28, halign: "right" },
+      4: { cellWidth: 32, halign: "right" },
     },
   });
 

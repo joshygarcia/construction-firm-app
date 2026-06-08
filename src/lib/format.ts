@@ -1,6 +1,5 @@
-const currencyFormatter = new Intl.NumberFormat("es-DO", {
-  style: "currency",
-  currency: "DOP",
+const numberFormatter = new Intl.NumberFormat("es-DO", {
+  minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
@@ -19,7 +18,7 @@ const monthFormatter = new Intl.DateTimeFormat("es-DO", {
 });
 
 export function formatCurrency(value: number) {
-  return currencyFormatter.format(value);
+  return `RD$${numberFormatter.format(value)}`;
 }
 
 export function formatCompactCurrency(value: number) {
