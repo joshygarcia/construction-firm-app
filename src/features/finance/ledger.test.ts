@@ -180,6 +180,7 @@ function buildFixture(): AppData {
     cardPayments: [],
     loans: [],
     loanMovements: [],
+    priceItems: [],
   };
 }
 

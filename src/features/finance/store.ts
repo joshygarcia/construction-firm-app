@@ -80,12 +80,20 @@ import {
   deriveAccountsReceivable,
   deriveAccountsPayable,
   deriveMonthlyMovements,
+  createPriceItem,
+  updatePriceItem,
+  deletePriceItem,
+  applyPricesToProjectBudget,
+  deleteBudgetLines,
+  clearProjectBudget,
   type CreateCardInput,
   type UpdateCardInput,
   type CreateCardPaymentInput,
   type CreateLoanInput,
   type UpdateLoanInput,
   type CreateLoanMovementInput,
+  type CreatePriceItemInput,
+  type UpdatePriceItemInput,
 } from "@/features/finance/ledger";
 import { createAppDataPersistence, type AppDataPersistence } from "@/features/finance/persistence";
 import { getStoreFilePath } from "@/features/finance/paths";
@@ -190,6 +198,7 @@ export function getReferenceData() {
     contracts: data.contractorContracts,
     suggestionOptions: data.suggestionOptions,
     cards: data.cards,
+    priceItems: data.priceItems,
     projectSummaries,
     budgetRows,
     contractorBalances,
@@ -406,6 +415,18 @@ export function removeBudgetLine(budgetLineId: string) {
   return structuredClone(next);
 }
 
+export function removeBudgetLines(ids: string[]) {
+  const next = deleteBudgetLines(cloneData(), ids);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
+export function clearBudget(projectId: string) {
+  const next = clearProjectBudget(cloneData(), projectId);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
 export function saveBudgetSection(input: CreateBudgetSectionInput) {
   const next = createBudgetSection(cloneData(), input);
   persistence.write(next);
@@ -563,6 +584,36 @@ export function saveLoanMovement(input: CreateLoanMovementInput) {
   const next = createLoanMovement(cloneData(), input);
   persistence.write(next);
   return next.loanMovements.at(-1) ?? null;
+}
+
+// ---------- Tabla de precios ----------
+
+export function getPriceItems() {
+  return cloneData().priceItems;
+}
+
+export function savePriceItem(input: CreatePriceItemInput) {
+  const next = createPriceItem(cloneData(), input);
+  persistence.write(next);
+  return next.priceItems.at(-1) ?? null;
+}
+
+export function editPriceItem(input: UpdatePriceItemInput) {
+  const next = updatePriceItem(cloneData(), input);
+  persistence.write(next);
+  return next.priceItems.find((p) => p.id === input.id) ?? null;
+}
+
+export function removePriceItem(id: string) {
+  const next = deletePriceItem(cloneData(), id);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
+export function applyBudgetPrices(projectId: string) {
+  const { data, updated } = applyPricesToProjectBudget(cloneData(), projectId);
+  persistence.write(data);
+  return updated;
 }
 
 // ---------- Finanzas (empresa) ----------

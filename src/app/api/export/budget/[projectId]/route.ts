@@ -126,7 +126,17 @@ export async function GET(
     const nivelLines = budgetLines.filter((l) => nivelOf(l.area) === nivel);
     if (hasNiveles) {
       tableBody.push([
-        { content: nivel ?? "Sin nivel", colSpan: 5, styles: { fontStyle: "bold", fillColor: [180, 120, 60], textColor: [255, 255, 255] } },
+        {
+          content: `NIVEL · ${nivel ?? "Sin nivel"}`,
+          colSpan: 5,
+          styles: {
+            fontStyle: "bold",
+            fillColor: [38, 70, 120],
+            textColor: [255, 255, 255],
+            fontSize: 10,
+            cellPadding: 3,
+          },
+        },
       ]);
     }
     const byCat = new Map<string, typeof budgetLines>();
@@ -140,7 +150,11 @@ export async function GET(
       nb += renderCategory(catKey === "__nocat" ? null : catKey, byCat.get(catKey)!);
     }
     if (hasNiveles) {
-      tableBody.push(subtotalRow(`Subtotal ${nivel ?? "Sin nivel"}`, nb, { fontStyle: "bold", fillColor: [245, 235, 225] }));
+      tableBody.push(subtotalRow(`Subtotal nivel ${nivel ?? "Sin nivel"}`, nb, {
+        fontStyle: "bold",
+        fillColor: [219, 229, 245],
+        textColor: [38, 70, 120],
+      }));
     }
     grandBudgeted += nb;
   }

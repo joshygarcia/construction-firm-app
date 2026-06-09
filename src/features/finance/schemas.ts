@@ -225,6 +225,21 @@ export const loanMovementSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const priceItemSchema = z.object({
+  categoryId: z.string().min(1, "Selecciona una categoría."),
+  subcategoryId: z.string().optional().nullable(),
+  name: z.string().min(2, "Agrega un nombre."),
+  unit: z.string().optional().nullable(),
+  unitPrice: z.coerce.number().min(0, "El precio no puede ser negativo."),
+});
+
+export const updatePriceItemSchema = priceItemSchema.extend({
+  id: z.string().min(1),
+});
+
+export type PriceItemFormInput = z.output<typeof priceItemSchema>;
+export type UpdatePriceItemFormInput = z.output<typeof updatePriceItemSchema>;
+
 export type CardFormInput = z.output<typeof cardSchema>;
 export type UpdateCardFormInput = z.output<typeof updateCardSchema>;
 export type CardPaymentFormInput = z.output<typeof cardPaymentSchema>;

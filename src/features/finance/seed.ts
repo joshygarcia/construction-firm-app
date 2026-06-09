@@ -551,6 +551,7 @@ export const seedData: AppData = {
   cardPayments: [],
   loans: [],
   loanMovements: [],
+  priceItems: [],
 };
 
 /**
@@ -577,6 +578,7 @@ export function getInitialSeed(): AppData {
       cardPayments: [],
       loans: [],
       loanMovements: [],
+      priceItems: [],
     };
   }
   return seedData;

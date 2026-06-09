@@ -62,6 +62,15 @@ export default async function ProjectBudgetsPage({
     name: s.name,
   }));
 
+  const priceItems = reference.priceItems.map((p) => ({
+    categoryId: p.categoryId,
+    subcategoryId: p.subcategoryId,
+    name: p.name,
+    normalizedName: p.normalizedName,
+    unit: p.unit,
+    unitPrice: p.unitPrice,
+  }));
+
   return (
     <>
       <PageHeader
@@ -111,6 +120,7 @@ export default async function ProjectBudgetsPage({
           categories={categories}
           subcategories={subcategories}
           niveles={niveles}
+          priceItems={priceItems}
           lines={lines}
         />
       </div>

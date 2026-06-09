@@ -229,6 +229,17 @@ export type LoanMovement = {
   notes: string;
 };
 
+/** Ítem de la tabla de precios: precio por unidad para una categoría/subcategoría/nombre. */
+export type PriceItem = {
+  id: string;
+  categoryId: string | null;
+  subcategoryId: string | null;
+  name: string;
+  normalizedName: string;
+  unit: string | null;
+  unitPrice: number;
+};
+
 export type AppData = {
   organization: Organization;
   currentUser: CurrentUser;
@@ -248,6 +259,7 @@ export type AppData = {
   cardPayments: CardPayment[];
   loans: Loan[];
   loanMovements: LoanMovement[];
+  priceItems: PriceItem[];
 };
 
 export type ProjectSummary = {
@@ -627,6 +639,23 @@ export type MonthlyMovementRow = {
   pagosTarjeta: number;
   abonosPrestamo: number;
   prestamosRecibidos: number;
+};
+
+export type CreatePriceItemInput = {
+  categoryId: string | null;
+  subcategoryId?: string | null;
+  name: string;
+  unit?: string | null;
+  unitPrice: number;
+};
+
+export type UpdatePriceItemInput = {
+  id: string;
+  categoryId: string | null;
+  subcategoryId?: string | null;
+  name: string;
+  unit?: string | null;
+  unitPrice: number;
 };
 
 function createId(prefix: string) {
@@ -1661,6 +1690,34 @@ export function deleteBudgetLine(data: AppData, budgetLineId: string): AppData {
   return next;
 }
 
+/** Elimina varias partidas por id (y desvincula las transacciones). */
+export function deleteBudgetLines(data: AppData, ids: string[]): AppData {
+  const next = structuredClone(data);
+  const set = new Set(ids);
+  next.budgetLines = next.budgetLines.filter((l) => !set.has(l.id));
+  for (const txn of next.transactions) {
+    if (txn.budgetLineId && set.has(txn.budgetLineId)) {
+      txn.budgetLineId = null;
+    }
+  }
+  return next;
+}
+
+/** Elimina TODO el presupuesto de un proyecto. */
+export function clearProjectBudget(data: AppData, projectId: string): AppData {
+  const next = structuredClone(data);
+  const removed = new Set(
+    next.budgetLines.filter((l) => l.projectId === projectId).map((l) => l.id),
+  );
+  next.budgetLines = next.budgetLines.filter((l) => l.projectId !== projectId);
+  for (const txn of next.transactions) {
+    if (txn.budgetLineId && removed.has(txn.budgetLineId)) {
+      txn.budgetLineId = null;
+    }
+  }
+  return next;
+}
+
 export function createContractorPayment(
   data: AppData,
   input: CreateContractorPaymentInput,
@@ -2360,6 +2417,95 @@ export function deleteLoan(data: AppData, loanId: string): AppData {
 
   next.loans.splice(index, 1);
   return next;
+}
+
+// ---------- Tabla de precios ----------
+
+/** Busca el precio por categoría+subcategoría+nombre; cae a categoría+nombre. */
+export function findPriceItemMatch(
+  data: AppData,
+  query: { categoryId: string | null; subcategoryId?: string | null; name: string },
+): PriceItem | null {
+  const n = normalizeLookupValue(query.name);
+  if (!n) return null;
+  const cat = query.categoryId ?? null;
+  const sub = query.subcategoryId ?? null;
+  const items = data.priceItems ?? [];
+  return (
+    items.find((p) => p.categoryId === cat && p.subcategoryId === sub && p.normalizedName === n) ??
+    items.find((p) => p.categoryId === cat && p.normalizedName === n) ??
+    null
+  );
+}
+
+export function createPriceItem(data: AppData, input: CreatePriceItemInput): AppData {
+  const name = requireNonEmptyValue(input.name, "El nombre es obligatorio.");
+  const next = structuredClone(data);
+  const normalizedName = normalizeLookupValue(name);
+  const cat = input.categoryId ?? null;
+  const sub = input.subcategoryId ?? null;
+
+  const existing = next.priceItems.find(
+    (p) => p.categoryId === cat && p.subcategoryId === sub && p.normalizedName === normalizedName,
+  );
+  if (existing) {
+    existing.name = name;
+    existing.unit = input.unit ?? existing.unit;
+    existing.unitPrice = input.unitPrice;
+    return next;
+  }
+
+  next.priceItems.push({
+    id: createId("price"),
+    categoryId: cat,
+    subcategoryId: sub,
+    name,
+    normalizedName,
+    unit: input.unit ?? null,
+    unitPrice: input.unitPrice,
+  });
+  return next;
+}
+
+export function updatePriceItem(data: AppData, input: UpdatePriceItemInput): AppData {
+  const next = structuredClone(data);
+  const item = next.priceItems.find((p) => p.id === input.id);
+  if (!item) {
+    throw new Error("Precio no encontrado.");
+  }
+  item.categoryId = input.categoryId ?? null;
+  item.subcategoryId = input.subcategoryId ?? null;
+  item.name = requireNonEmptyValue(input.name, "El nombre es obligatorio.");
+  item.normalizedName = normalizeLookupValue(item.name);
+  item.unit = input.unit ?? null;
+  item.unitPrice = input.unitPrice;
+  return next;
+}
+
+export function deletePriceItem(data: AppData, id: string): AppData {
+  const next = structuredClone(data);
+  next.priceItems = next.priceItems.filter((p) => p.id !== id);
+  return next;
+}
+
+/** Aplica los precios de la tabla a las partidas del proyecto que coincidan. */
+export function applyPricesToProjectBudget(data: AppData, projectId: string): { data: AppData; updated: number } {
+  const next = structuredClone(data);
+  let updated = 0;
+  for (const line of next.budgetLines) {
+    if (line.projectId !== projectId) continue;
+    const match = findPriceItemMatch(next, {
+      categoryId: line.categoryId,
+      subcategoryId: line.subcategoryId,
+      name: line.description,
+    });
+    if (!match || match.unitPrice === line.unitPrice) continue;
+    line.unitPrice = match.unitPrice;
+    line.totalBudgeted = Math.round((line.quantity ?? 1) * match.unitPrice * 100) / 100;
+    line.isManualTotal = false;
+    updated++;
+  }
+  return { data: next, updated };
 }
 
 export function createLoanMovement(

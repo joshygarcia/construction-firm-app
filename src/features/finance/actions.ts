@@ -38,6 +38,8 @@ import {
   incomeSchema,
   loanMovementSchema,
   loanSchema,
+  priceItemSchema,
+  updatePriceItemSchema,
   projectSchema,
   quickEntrySchema,
   updateCardSchema,
@@ -70,6 +72,8 @@ import {
   editTransaction,
   lockBudgetVersion,
   removeBudgetLine,
+  removeBudgetLines,
+  clearBudget,
   removeBudgetSection,
   removeBudgetVersion,
   removeContractor,
@@ -89,6 +93,10 @@ import {
   editLoan,
   removeLoan,
   saveLoanMovement,
+  savePriceItem,
+  editPriceItem,
+  removePriceItem,
+  applyBudgetPrices,
   editCategory,
   editSubcategory,
   removeCategory,
@@ -561,6 +569,28 @@ export async function submitDeleteBudgetLine(
     return invalidResult(
       error instanceof Error ? error.message : "No se pudo eliminar la línea.",
     );
+  }
+}
+
+export async function submitDeleteBudgetLines(ids: string[]): Promise<ActionResult> {
+  try {
+    if (!ids || ids.length === 0) return invalidResult("No hay partidas para eliminar.");
+    removeBudgetLines(ids);
+    refresh();
+    return { ok: true, message: "Categoría eliminada del presupuesto." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar la categoría.");
+  }
+}
+
+export async function submitClearBudget(projectId: string): Promise<ActionResult> {
+  try {
+    if (!projectId) return invalidResult("Proyecto requerido.");
+    clearBudget(projectId);
+    refresh();
+    return { ok: true, message: "Presupuesto eliminado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar el presupuesto.");
   }
 }
 
@@ -1452,6 +1482,173 @@ export async function submitDeleteLoan(loanId: string): Promise<ActionResult> {
     return { ok: true, message: "Préstamo eliminado correctamente." };
   } catch (error) {
     return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar el préstamo.");
+  }
+}
+
+// ---------- Tabla de precios ----------
+
+export async function submitPriceItem(input: {
+  categoryId: string;
+  subcategoryId?: string | null;
+  name: string;
+  unit?: string | null;
+  unitPrice: number;
+}): Promise<ActionResult> {
+  const parsed = priceItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos del precio.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    savePriceItem({
+      categoryId: parsed.data.categoryId,
+      subcategoryId: parsed.data.subcategoryId ?? null,
+      name: parsed.data.name,
+      unit: parsed.data.unit ?? null,
+      unitPrice: parsed.data.unitPrice,
+    });
+    refresh();
+    return { ok: true, message: "Precio guardado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo guardar el precio.");
+  }
+}
+
+export async function submitUpdatePriceItem(input: {
+  id: string;
+  categoryId: string;
+  subcategoryId?: string | null;
+  name: string;
+  unit?: string | null;
+  unitPrice: number;
+}): Promise<ActionResult> {
+  const parsed = updatePriceItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return invalidResult("Revisa los datos del precio.", parsed.error.flatten().fieldErrors);
+  }
+  try {
+    editPriceItem({
+      id: parsed.data.id,
+      categoryId: parsed.data.categoryId,
+      subcategoryId: parsed.data.subcategoryId ?? null,
+      name: parsed.data.name,
+      unit: parsed.data.unit ?? null,
+      unitPrice: parsed.data.unitPrice,
+    });
+    refresh();
+    return { ok: true, message: "Precio actualizado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo actualizar el precio.");
+  }
+}
+
+export async function submitDeletePriceItem(id: string): Promise<ActionResult> {
+  try {
+    removePriceItem(id);
+    refresh();
+    return { ok: true, message: "Precio eliminado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar el precio.");
+  }
+}
+
+export async function submitApplyPrices(projectId: string): Promise<ActionResult> {
+  try {
+    if (!projectId) return invalidResult("Proyecto requerido.");
+    const updated = applyBudgetPrices(projectId);
+    refresh();
+    return {
+      ok: true,
+      message:
+        updated === 0
+          ? "No hubo partidas que coincidan con la tabla de precios."
+          : `${updated} ${updated === 1 ? "precio aplicado" : "precios aplicados"} desde la tabla.`,
+    };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudieron aplicar los precios.");
+  }
+}
+
+export async function submitPriceImport(formData: FormData): Promise<ActionResult> {
+  try {
+    const file = formData.get("file") as File | null;
+    if (!file || file.size === 0) {
+      return invalidResult("Selecciona un archivo Excel (.xlsx).");
+    }
+
+    const buffer = await file.arrayBuffer();
+    const { budgetLines } = parseExcelFile(buffer);
+    if (budgetLines.length === 0) {
+      return invalidResult("No se encontraron partidas con precio en el archivo.");
+    }
+
+    const data = getAppData();
+    const categoryByName = new Map(
+      data.categories.map((c) => [c.name.trim().toLowerCase(), c]),
+    );
+    const subcategoryByName = new Map(
+      data.subcategories.map((s) => [`${s.categoryId}::${s.name.trim().toLowerCase()}`, s]),
+    );
+
+    // Dedupe por (categoría::nombre), tomando el primer precio > 0.
+    const seen = new Set<string>();
+    let imported = 0;
+
+    for (const bl of budgetLines) {
+      const name = bl.description.trim();
+      if (!name || bl.unitPrice <= 0) continue;
+      const key = `${bl.categoryName.trim().toLowerCase()}::${name.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Resolver categoría (crear si falta).
+      let categoryId: string | null = null;
+      if (bl.categoryName) {
+        const existing = categoryByName.get(bl.categoryName.trim().toLowerCase());
+        if (existing) {
+          categoryId = existing.id;
+        } else {
+          const created = saveCategory({ name: bl.categoryName });
+          if (created) {
+            categoryId = created.id;
+            categoryByName.set(bl.categoryName.trim().toLowerCase(), created);
+          }
+        }
+      }
+      if (!categoryId) continue;
+
+      // Subcategoría (si el archivo la trae).
+      let subcategoryId: string | null = null;
+      if (bl.subcategoryName) {
+        const subKey = `${categoryId}::${bl.subcategoryName.trim().toLowerCase()}`;
+        const existing = subcategoryByName.get(subKey);
+        if (existing) {
+          subcategoryId = existing.id;
+        } else {
+          const created = saveSubcategory({ categoryId, name: bl.subcategoryName });
+          if (created) {
+            subcategoryId = created.id;
+            subcategoryByName.set(subKey, created);
+          }
+        }
+      }
+
+      savePriceItem({
+        categoryId,
+        subcategoryId,
+        name,
+        unit: bl.unit || null,
+        unitPrice: bl.unitPrice,
+      });
+      imported++;
+    }
+
+    refresh();
+    return {
+      ok: true,
+      message: `${imported} ${imported === 1 ? "precio importado" : "precios importados"}.`,
+    };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo importar la tabla de precios.");
   }
 }
 

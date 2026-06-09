@@ -3,12 +3,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDownIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 import {
   submitBudgetGridLine,
   submitUpdateBudgetLine,
   submitDeleteBudgetLine,
+  submitDeleteBudgetLines,
+  submitClearBudget,
+  submitApplyPrices,
   createQuickEntryCategory,
   createQuickEntrySubcategory,
 } from "@/features/finance/actions";
@@ -19,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { TypeToConfirmDialog } from "@/components/shared/type-to-confirm-dialog";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +42,44 @@ export type BudgetGridLine = {
 
 type Category = { id: string; name: string };
 type Subcategory = { id: string; categoryId: string; name: string };
+type PriceItem = {
+  categoryId: string | null;
+  subcategoryId: string | null;
+  name: string;
+  normalizedName: string;
+  unit: string | null;
+  unitPrice: number;
+};
+
+/** Opciones de artículos de la tabla de precios para una categoría (y subcategoría). */
+function priceOptionsFor(
+  priceItems: PriceItem[],
+  categoryId: string | null,
+  subcategoryId: string | null,
+): CreatableOption[] {
+  const seen = new Set<string>();
+  return priceItems
+    .filter((p) => p.categoryId === (categoryId ?? null))
+    .filter((p) => (subcategoryId ? p.subcategoryId === subcategoryId : true))
+    .filter((p) => {
+      const k = p.normalizedName;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((p) => ({ value: p.name, label: p.name }));
+}
+
+/** Busca el artículo por categoría + nombre. */
+function lookupPriceItem(
+  priceItems: PriceItem[],
+  categoryId: string | null,
+  name: string,
+): PriceItem | null {
+  const n = name.trim().toLocaleLowerCase();
+  if (!n) return null;
+  return priceItems.find((p) => p.categoryId === (categoryId ?? null) && p.normalizedName === n) ?? null;
+}
 type RowState = BudgetGridLine;
 
 const SIN_CATEGORIA = "__none__";
@@ -49,16 +91,52 @@ export function BudgetGrid({
   categories,
   subcategories,
   niveles,
+  priceItems,
   lines,
 }: {
   projectId: string;
   categories: Category[];
   subcategories: Subcategory[];
   niveles: string[];
+  priceItems: PriceItem[];
   lines: BudgetGridLine[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  function applyPrices() {
+    startTransition(async () => {
+      const result = await submitApplyPrices(projectId);
+      if (result.ok) {
+        toast.success(result.message);
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
+
+  async function deleteCategoryRows(ids: string[]) {
+    const result = await submitDeleteBudgetLines(ids);
+    if (result.ok) {
+      toast.success(result.message);
+      router.refresh();
+    } else {
+      toast.error(result.message);
+    }
+    return result;
+  }
+
+  async function clearWholeBudget() {
+    const result = await submitClearBudget(projectId);
+    if (result.ok) {
+      toast.success(result.message);
+      router.refresh();
+    } else {
+      toast.error(result.message);
+    }
+    return result;
+  }
   const [rows, setRows] = useState<RowState[]>(lines);
   // Listas locales para reflejar al instante categorías/subcategorías/niveles creados.
   const [cats, setCats] = useState<Category[]>(categories);
@@ -218,11 +296,41 @@ export function BudgetGrid({
         subcategories={subcats}
         niveles={nivelList}
         disabled={isPending}
+        priceItems={priceItems}
         onCreateCategory={createCategoryOption}
         onCreateSubcategory={createSubcategoryOption}
         onCreateNivel={createNivelOption}
         onAdded={() => router.refresh()}
       />
+
+      {priceItems.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-muted/20 px-4 py-2.5">
+          <p className="text-[13px] text-muted-foreground">
+            Aplica los precios de la tabla a las partidas que coincidan (categoría, subcategoría y nombre).
+          </p>
+          <Button variant="outline" size="sm" disabled={isPending} onClick={applyPrices} className="gap-1 rounded-lg">
+            <TagIcon className="size-4" />
+            Aplicar precios de la tabla
+          </Button>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="flex justify-end">
+          <TypeToConfirmDialog
+            title="Eliminar todo el presupuesto"
+            description="Se eliminarán TODAS las partidas del presupuesto de este proyecto. Esta acción no se puede deshacer."
+            confirmLabel="Eliminar presupuesto"
+            trigger={
+              <Button variant="outline" size="sm" className="gap-1 rounded-lg text-destructive hover:text-destructive">
+                <Trash2Icon className="size-4" />
+                Eliminar presupuesto
+              </Button>
+            }
+            onConfirm={clearWholeBudget}
+          />
+        </div>
+      )}
 
       {groupedByNivel.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-10 text-center text-sm text-muted-foreground">
@@ -240,9 +348,11 @@ export function BudgetGrid({
             subcats={subcats}
             showHeader={hasNiveles}
             disabled={isPending}
+            priceItems={priceItems}
             onPatch={patchRow}
             onSave={saveRow}
             onDelete={deleteRow}
+            onDeleteCategory={deleteCategoryRows}
             onChangeSubcategory={changeSubcategory}
             onCreateSubcategory={createSubcategoryOption}
             onAdded={() => router.refresh()}
@@ -280,9 +390,11 @@ function NivelSection({
   subcats,
   showHeader,
   disabled,
+  priceItems,
   onPatch,
   onSave,
   onDelete,
+  onDeleteCategory,
   onChangeSubcategory,
   onCreateSubcategory,
   onAdded,
@@ -295,9 +407,11 @@ function NivelSection({
   subcats: Subcategory[];
   showHeader: boolean;
   disabled: boolean;
+  priceItems: PriceItem[];
   onPatch: (id: string, patch: Partial<RowState>) => void;
   onSave: (id: string) => void;
   onDelete: (id: string) => Promise<{ ok: boolean; message: string }>;
+  onDeleteCategory: (ids: string[]) => Promise<{ ok: boolean; message: string }>;
   onChangeSubcategory: (id: string, value: string | null) => void;
   onCreateSubcategory: (categoryId: string, name: string) => Promise<CreatableOption | null>;
   onAdded: () => void;
@@ -337,9 +451,11 @@ function NivelSection({
           nivel={nivel}
           subcatOptions={subcats.filter((s) => s.categoryId === group.categoryId)}
           disabled={disabled}
+          priceItems={priceItems}
           onPatch={onPatch}
           onSave={onSave}
           onDelete={onDelete}
+          onDeleteCategory={onDeleteCategory}
           onChangeSubcategory={onChangeSubcategory}
           onCreateSubcategory={onCreateSubcategory}
           onAdded={onAdded}
@@ -382,9 +498,11 @@ function CategorySection({
   nivel,
   subcatOptions,
   disabled,
+  priceItems,
   onPatch,
   onSave,
   onDelete,
+  onDeleteCategory,
   onChangeSubcategory,
   onCreateSubcategory,
   onAdded,
@@ -396,9 +514,11 @@ function CategorySection({
   nivel: string | null;
   subcatOptions: Subcategory[];
   disabled: boolean;
+  priceItems: PriceItem[];
   onPatch: (id: string, patch: Partial<RowState>) => void;
   onSave: (id: string) => void;
   onDelete: (id: string) => Promise<{ ok: boolean; message: string }>;
+  onDeleteCategory: (ids: string[]) => Promise<{ ok: boolean; message: string }>;
   onChangeSubcategory: (id: string, value: string | null) => void;
   onCreateSubcategory: (categoryId: string, name: string) => Promise<CreatableOption | null>;
   onAdded: () => void;
@@ -435,22 +555,33 @@ function CategorySection({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-card)]">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 bg-muted/40 px-4 py-3 text-left hover:bg-muted/60"
-      >
-        <span className="flex items-center gap-2 font-semibold uppercase tracking-wide">
+      <div className="flex items-center justify-between gap-3 bg-muted/40 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex flex-1 items-center gap-2 text-left font-semibold uppercase tracking-wide hover:opacity-80"
+        >
           <ChevronDownIcon className={cn("size-4 transition-transform", !open && "-rotate-90")} />
           {name}
           <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{rows.length}</span>
-        </span>
+        </button>
         <span className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
           <span>Presup. <span className="font-mono text-foreground">{formatCurrency(budget)}</span></span>
           <span>Gastado <span className="font-mono text-foreground">{formatCurrency(paid)}</span></span>
           <span>Restante <span className={cn("font-mono", remaining < 0 ? "text-[var(--negative)]" : "text-foreground")}>{formatCurrency(remaining)}</span></span>
         </span>
-      </button>
+        <TypeToConfirmDialog
+          title="Eliminar categoría completa"
+          description={`Se eliminarán las ${rows.length} partida(s) de "${name}"${nivel ? ` en el nivel ${nivel}` : ""}. Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar categoría"
+          trigger={
+            <Button variant="ghost" size="icon-sm" disabled={disabled} title="Eliminar categoría">
+              <Trash2Icon className="size-3.5 text-destructive" />
+            </Button>
+          }
+          onConfirm={() => onDeleteCategory(rows.map((r) => r.id))}
+        />
+      </div>
 
       {open && (
         <div className="overflow-x-auto">
@@ -546,6 +677,7 @@ function CategorySection({
             nivel={nivel}
             subcatOptions={subcatOptions}
             disabled={disabled}
+            priceItems={priceItems}
             onCreateSubcategory={onCreateSubcategory}
             onAdded={onAdded}
           />
@@ -676,6 +808,7 @@ function InlineAddRow({
   nivel,
   subcatOptions,
   disabled,
+  priceItems,
   onCreateSubcategory,
   onAdded,
 }: {
@@ -684,6 +817,7 @@ function InlineAddRow({
   nivel: string | null;
   subcatOptions: Subcategory[];
   disabled: boolean;
+  priceItems: PriceItem[];
   onCreateSubcategory: (categoryId: string, name: string) => Promise<CreatableOption | null>;
   onAdded: () => void;
 }) {
@@ -729,13 +863,24 @@ function InlineAddRow({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-dashed border-border/60 bg-muted/10 px-3 py-2">
-      <Input
-        placeholder="Nueva partida…"
-        value={desc}
-        onChange={(e) => setDesc(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && add()}
-        className="h-9 min-w-[160px] flex-1"
-      />
+      <div className="min-w-[200px] flex-1">
+        <CreatableCombobox
+          value={desc}
+          options={priceOptionsFor(priceItems, categoryId, subcategoryId || null)}
+          placeholder="Artículo o nueva partida"
+          searchPlaceholder="Buscar artículo o escribir"
+          createLabel="Usar"
+          onChange={(v) => {
+            setDesc(v);
+            const item = lookupPriceItem(priceItems, categoryId, v);
+            if (item) {
+              if (item.unit) setUnit(item.unit);
+              setPrice(String(item.unitPrice));
+            }
+          }}
+          onCreate={async (q) => ({ value: q.trim(), label: q.trim() })}
+        />
+      </div>
       {subcatOptions.length > 0 && (
         <div className="w-48">
           <SubcatCombobox
@@ -772,6 +917,7 @@ function QuickAdd({
   subcategories,
   niveles,
   disabled,
+  priceItems,
   onCreateCategory,
   onCreateSubcategory,
   onCreateNivel,
@@ -782,6 +928,7 @@ function QuickAdd({
   subcategories: Subcategory[];
   niveles: string[];
   disabled: boolean;
+  priceItems: PriceItem[];
   onCreateCategory: (name: string) => Promise<CreatableOption | null>;
   onCreateSubcategory: (categoryId: string, name: string) => Promise<CreatableOption | null>;
   onCreateNivel: (name: string) => Promise<CreatableOption | null>;
@@ -858,6 +1005,7 @@ function QuickAdd({
             onChange={(v) => {
               setCategoryId(v);
               setSubcategoryId("");
+              setDesc("");
             }}
             onCreate={onCreateCategory}
           />
@@ -875,13 +1023,24 @@ function QuickAdd({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <Input
-          placeholder="Descripción de la partida"
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          className="min-w-[200px] flex-1"
-        />
+        <div className="min-w-[240px] flex-1">
+          <CreatableCombobox
+            value={desc}
+            options={priceOptionsFor(priceItems, categoryId, subcategoryId || null)}
+            placeholder="Artículo de la tabla o nueva descripción"
+            searchPlaceholder="Buscar artículo o escribir descripción"
+            createLabel="Usar"
+            onChange={(v) => {
+              setDesc(v);
+              const item = lookupPriceItem(priceItems, categoryId, v);
+              if (item) {
+                if (item.unit) setUnit(item.unit);
+                setPrice(String(item.unitPrice));
+              }
+            }}
+            onCreate={async (q) => ({ value: q.trim(), label: q.trim() })}
+          />
+        </div>
         <Input value={qty} onChange={(e) => setQty(e.target.value)} className="w-16 text-right" inputMode="decimal" title="Cantidad" />
         <Input value={unit} onChange={(e) => setUnit(e.target.value)} className="w-20" title="Unidad" />
         <Input

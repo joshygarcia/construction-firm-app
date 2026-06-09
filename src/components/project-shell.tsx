@@ -13,6 +13,7 @@ import {
   LineChartIcon,
   PlusIcon,
   Settings2Icon,
+  TagIcon,
 } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -40,6 +41,7 @@ function getNavItems(projectId: string) {
     { href: `/projects/${projectId}`, label: "Panel", icon: BarChart3Icon, exact: true },
     { href: `/projects/${projectId}/transactions`, label: "Movimientos", icon: CreditCardIcon },
     { href: `/projects/${projectId}/budgets`, label: "Presupuesto", icon: ClipboardListIcon },
+    { href: "/precios", label: "Tabla de precios", icon: TagIcon },
     { href: `/projects/${projectId}/contractors`, label: "Contratistas", icon: Building2Icon },
     { href: `/projects/${projectId}/invoices`, label: "Facturas y recibos", icon: FileTextIcon },
     { href: `/projects/${projectId}/reports`, label: "Reportes", icon: LineChartIcon },

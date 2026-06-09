@@ -30,6 +30,7 @@ function normalizeAppData(data: AppData, seedData: AppData) {
     cardPayments: data.cardPayments ?? [],
     loans: data.loans ?? [],
     loanMovements: data.loanMovements ?? [],
+    priceItems: data.priceItems ?? [],
   } satisfies AppData;
 }
 
@@ -49,7 +50,8 @@ function hasLegacyGaps(data: Partial<AppData>) {
     data.cards === undefined ||
     data.cardPayments === undefined ||
     data.loans === undefined ||
-    data.loanMovements === undefined
+    data.loanMovements === undefined ||
+    data.priceItems === undefined
   );
 }
 
