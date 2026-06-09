@@ -34,14 +34,29 @@ type Transaction = {
   detail: string;
   payeeOrSource: string;
   paymentMethod: string;
+  cardId?: string | null;
 };
+
+type CategoryOption = { id: string; name: string };
+type SubcategoryOption = { id: string; categoryId: string; name: string };
+type CardOption = { id: string; name: string };
 
 const searchKeys: (keyof Transaction)[] = ["detail", "payeeOrSource", "paymentMethod"];
 
 export function TransactionsTable({
   transactions,
+  categories,
+  subcategories,
+  cards,
+  counterparties,
+  paymentMethods,
 }: {
   transactions: Transaction[];
+  categories: CategoryOption[];
+  subcategories: SubcategoryOption[];
+  cards: CardOption[];
+  counterparties: string[];
+  paymentMethods: string[];
 }) {
   const router = useRouter();
   const { query, setQuery, page, totalPages, goToPage, paginated, totalFiltered } =
@@ -103,7 +118,14 @@ export function TransactionsTable({
                   >
                     <ReceiptTextIcon />
                   </Button>
-                  <EditTransactionDialog transaction={transaction} />
+                  <EditTransactionDialog
+                    transaction={transaction}
+                    categories={categories}
+                    subcategories={subcategories}
+                    cards={cards}
+                    counterparties={counterparties}
+                    paymentMethods={paymentMethods}
+                  />
                   <ConfirmDialog
                     title="Eliminar movimiento"
                     description="Este movimiento se marcará como eliminado. Esta acción no se puede deshacer fácilmente."

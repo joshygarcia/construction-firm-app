@@ -86,6 +86,10 @@ import {
   applyPricesToProjectBudget,
   deleteBudgetLines,
   clearProjectBudget,
+  moveBudgetItem as moveBudgetItemLedger,
+  reorderBudgetLines as reorderBudgetLinesLedger,
+  type BudgetMoveLevel,
+  type BudgetMoveTarget,
   type CreateCardInput,
   type UpdateCardInput,
   type CreateCardPaymentInput,
@@ -423,6 +427,23 @@ export function removeBudgetLines(ids: string[]) {
 
 export function clearBudget(projectId: string) {
   const next = clearProjectBudget(cloneData(), projectId);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
+export function moveBudgetItem(
+  projectId: string,
+  level: BudgetMoveLevel,
+  target: BudgetMoveTarget,
+  direction: "up" | "down",
+) {
+  const next = moveBudgetItemLedger(cloneData(), projectId, level, target, direction);
+  persistence.write(next);
+  return structuredClone(next);
+}
+
+export function reorderBudgetLines(projectId: string, orderedIds: string[]) {
+  const next = reorderBudgetLinesLedger(cloneData(), projectId, orderedIds);
   persistence.write(next);
   return structuredClone(next);
 }

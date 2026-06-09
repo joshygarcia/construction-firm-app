@@ -1,9 +1,17 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type DragEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDownIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
+import { ChevronDownIcon, GripVerticalIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 import {
   submitBudgetGridLine,
@@ -11,6 +19,7 @@ import {
   submitDeleteBudgetLine,
   submitDeleteBudgetLines,
   submitClearBudget,
+  submitReorderBudgetLines,
   submitApplyPrices,
   createQuickEntryCategory,
   createQuickEntrySubcategory,
@@ -37,6 +46,7 @@ export type BudgetGridLine = {
   unitPrice: number | null;
   totalBudgeted: number;
   isManualTotal: boolean;
+  sortOrder: number;
   paid: number;
 };
 
@@ -85,6 +95,143 @@ type RowState = BudgetGridLine;
 const SIN_CATEGORIA = "__none__";
 const SIN_SUBCATEGORIA = "__nonesub__";
 const SIN_NIVEL = "__nonivel__";
+const SEP = "";
+
+// ---------------------------------------------------------------------------
+// Drag & drop: árbol de orden (nivel → categoría → subcategoría → partida)
+// ---------------------------------------------------------------------------
+
+type Level = "nivel" | "category" | "subcategory" | "line";
+
+type TreeSub = { key: string; lines: RowState[] };
+type TreeCat = { key: string; subs: TreeSub[]; subMap: Map<string, TreeSub> };
+type TreeNivel = { key: string; cats: TreeCat[]; catMap: Map<string, TreeCat> };
+
+function nivelKeyOfRow(r: RowState) {
+  return r.area && r.area.trim() ? r.area : SIN_NIVEL;
+}
+
+/** Construye el árbol agrupando por primera aparición (idéntico al display). */
+function buildTree(rows: RowState[]): TreeNivel[] {
+  const niveles: TreeNivel[] = [];
+  const nivelMap = new Map<string, TreeNivel>();
+  for (const r of rows) {
+    const nk = nivelKeyOfRow(r);
+    let nivel = nivelMap.get(nk);
+    if (!nivel) {
+      nivel = { key: nk, cats: [], catMap: new Map() };
+      nivelMap.set(nk, nivel);
+      niveles.push(nivel);
+    }
+    const ck = r.categoryId ?? SIN_CATEGORIA;
+    let cat = nivel.catMap.get(ck);
+    if (!cat) {
+      cat = { key: ck, subs: [], subMap: new Map() };
+      nivel.catMap.set(ck, cat);
+      nivel.cats.push(cat);
+    }
+    const sk = r.subcategoryId ?? SIN_SUBCATEGORIA;
+    let sub = cat.subMap.get(sk);
+    if (!sub) {
+      sub = { key: sk, lines: [] };
+      cat.subMap.set(sk, sub);
+      cat.subs.push(sub);
+    }
+    sub.lines.push(r);
+  }
+  return niveles;
+}
+
+function flattenTree(niveles: TreeNivel[]): RowState[] {
+  const out: RowState[] = [];
+  for (const n of niveles) for (const c of n.cats) for (const s of c.subs) for (const l of s.lines) out.push(l);
+  return out;
+}
+
+type Dnd = {
+  activeKey: string | null;
+  activeLevel: Level | null;
+  overKey: string | null;
+  disabled: boolean;
+  canDrop: (level: Level, scope: string, key: string) => boolean;
+  start: (level: Level, scope: string, key: string) => void;
+  setOver: (key: string | null) => void;
+  drop: (level: Level, scope: string, key: string) => void;
+  end: () => void;
+};
+
+/** ¿Se está arrastrando este ítem ahora mismo? (atenúa el original) */
+function isDragging(level: Level, key: string, dnd: Dnd) {
+  return dnd.activeLevel === level && dnd.activeKey === key;
+}
+
+function dropHandlers(level: Level, scope: string, key: string, dnd: Dnd) {
+  return {
+    onDragOver: (e: DragEvent) => {
+      if (!dnd.canDrop(level, scope, key)) return;
+      e.preventDefault();
+      if (dnd.overKey !== key) dnd.setOver(key);
+    },
+    onDragLeave: () => {
+      if (dnd.overKey === key) dnd.setOver(null);
+    },
+    onDrop: (e: DragEvent) => {
+      if (!dnd.canDrop(level, scope, key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dnd.drop(level, scope, key);
+    },
+  };
+}
+
+function isDropActive(level: Level, scope: string, key: string, dnd: Dnd) {
+  return dnd.overKey === key && dnd.canDrop(level, scope, key);
+}
+
+function DragHandle({
+  level,
+  scope,
+  dataKey,
+  dnd,
+  dragImageSelector,
+  className,
+}: {
+  level: Level;
+  scope: string;
+  dataKey: string;
+  dnd: Dnd;
+  /** Selector del ancestro a usar como imagen arrastrada (la tarjeta/fila completa). */
+  dragImageSelector: string;
+  className?: string;
+}) {
+  if (dnd.disabled) return null;
+  return (
+    <span
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", dataKey);
+        e.stopPropagation();
+        // Usar la tarjeta/fila completa como "fantasma" que sigue al cursor.
+        const card = e.currentTarget.closest(dragImageSelector);
+        if (card instanceof HTMLElement) {
+          const rect = card.getBoundingClientRect();
+          e.dataTransfer.setDragImage(card, e.clientX - rect.left, e.clientY - rect.top);
+        }
+        dnd.start(level, scope, dataKey);
+      }}
+      onDragEnd={() => dnd.end()}
+      onClick={(e) => e.stopPropagation()}
+      title="Arrastra para reordenar"
+      className={cn(
+        "flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing",
+        className,
+      )}
+    >
+      <GripVerticalIcon className="size-3.5" />
+    </span>
+  );
+}
 
 export function BudgetGrid({
   projectId,
@@ -137,6 +284,7 @@ export function BudgetGrid({
     }
     return result;
   }
+
   const [rows, setRows] = useState<RowState[]>(lines);
   // Listas locales para reflejar al instante categorías/subcategorías/niveles creados.
   const [cats, setCats] = useState<Category[]>(categories);
@@ -158,17 +306,21 @@ export function BudgetGrid({
       list.push(row);
       map.set(key, list);
     }
-    const known = nivelList.filter((n) => map.has(n));
-    const extra = [...map.keys()].filter((k) => k !== SIN_NIVEL && !nivelList.includes(k));
-    const order = [...known, ...extra, SIN_NIVEL];
-    return order
-      .filter((k) => map.has(k))
-      .map((k) => ({
-        nivel: k === SIN_NIVEL ? null : k,
-        name: k === SIN_NIVEL ? "Sin nivel" : k,
-        rows: map.get(k)!,
-      }));
-  }, [rows, nivelList]);
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const k = row.area && row.area.trim() ? row.area : SIN_NIVEL;
+      if (!seen.has(k)) {
+        seen.add(k);
+        order.push(k);
+      }
+    }
+    return order.map((k) => ({
+      nivel: k === SIN_NIVEL ? null : k,
+      name: k === SIN_NIVEL ? "Sin nivel" : k,
+      rows: map.get(k)!,
+    }));
+  }, [rows]);
 
   const hasNiveles = groupedByNivel.some((g) => g.nivel !== null);
   const grandBudget = rows.reduce((s, r) => s + r.totalBudgeted, 0);
@@ -262,16 +414,11 @@ export function BudgetGrid({
 
   // Mover a otra subcategoría (regrupa al instante con el estado local).
   function changeSubcategory(id: string, value: string | null) {
-    let updated: RowState | undefined;
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        updated = { ...r, subcategoryId: value };
-        return updated;
-      }),
-    );
+    const target = rowsRef.current.find((r) => r.id === id);
+    if (!target) return;
+    const updated = { ...target, subcategoryId: value };
+    setRows((prev) => prev.map((r) => (r.id === id ? updated : r)));
     startTransition(async () => {
-      if (!updated) return;
       const result = await persistRow(updated);
       if (!result.ok) toast.error(result.message);
     });
@@ -287,6 +434,79 @@ export function BudgetGrid({
     }
     return result;
   }
+
+  // --- drag & drop --------------------------------------------------------
+  const [dragItem, setDragItem] = useState<{ level: Level; scope: string; key: string } | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+
+  function reorder(level: Level, scope: string, fromKey: string, toKey: string) {
+    if (fromKey === toKey) return;
+    const tree = buildTree(rowsRef.current);
+    const parts = scope.length ? scope.split(SEP) : [];
+
+    const moveInArray = <T,>(arr: T[], keyer: (t: T) => string): boolean => {
+      const fromIdx = arr.findIndex((t) => keyer(t) === fromKey);
+      const toIdx = arr.findIndex((t) => keyer(t) === toKey);
+      if (fromIdx < 0 || toIdx < 0) return false;
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      return true;
+    };
+
+    let ok = false;
+    if (level === "nivel") {
+      ok = moveInArray(tree, (n) => n.key);
+    } else {
+      const nivel = tree.find((n) => n.key === parts[0]);
+      if (!nivel) return;
+      if (level === "category") {
+        ok = moveInArray(nivel.cats, (c) => c.key);
+      } else {
+        const cat = nivel.cats.find((c) => c.key === parts[1]);
+        if (!cat) return;
+        if (level === "subcategory") {
+          ok = moveInArray(cat.subs, (s) => s.key);
+        } else {
+          const sub = cat.subs.find((s) => s.key === parts[2]);
+          if (!sub) return;
+          ok = moveInArray(sub.lines, (l) => l.id);
+        }
+      }
+    }
+    if (!ok) return;
+
+    const newRows = flattenTree(tree);
+    setRows(newRows);
+    startTransition(async () => {
+      const result = await submitReorderBudgetLines(projectId, newRows.map((r) => r.id));
+      if (!result.ok) {
+        toast.error(result.message);
+        router.refresh();
+      }
+    });
+  }
+
+  const dnd: Dnd = {
+    activeKey: dragItem?.key ?? null,
+    activeLevel: dragItem?.level ?? null,
+    overKey,
+    disabled: isPending,
+    canDrop: (level, scope, key) =>
+      !!dragItem && dragItem.level === level && dragItem.scope === scope && dragItem.key !== key,
+    start: (level, scope, key) => setDragItem({ level, scope, key }),
+    setOver: (key) => setOverKey(key),
+    drop: (level, scope, key) => {
+      if (dragItem && dragItem.level === level && dragItem.scope === scope && dragItem.key !== key) {
+        reorder(level, scope, dragItem.key, key);
+      }
+      setDragItem(null);
+      setOverKey(null);
+    },
+    end: () => {
+      setDragItem(null);
+      setOverKey(null);
+    },
+  };
 
   return (
     <div className="space-y-4">
@@ -316,7 +536,11 @@ export function BudgetGrid({
       )}
 
       {rows.length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[13px] text-muted-foreground">
+            Arrastra <GripVerticalIcon className="inline size-3.5 align-text-bottom" /> para reordenar niveles,
+            categorías, subcategorías y partidas.
+          </p>
           <TypeToConfirmDialog
             title="Eliminar todo el presupuesto"
             description="Se eliminarán TODAS las partidas del presupuesto de este proyecto. Esta acción no se puede deshacer."
@@ -349,6 +573,7 @@ export function BudgetGrid({
             showHeader={hasNiveles}
             disabled={isPending}
             priceItems={priceItems}
+            dnd={dnd}
             onPatch={patchRow}
             onSave={saveRow}
             onDelete={deleteRow}
@@ -391,6 +616,7 @@ function NivelSection({
   showHeader,
   disabled,
   priceItems,
+  dnd,
   onPatch,
   onSave,
   onDelete,
@@ -408,6 +634,7 @@ function NivelSection({
   showHeader: boolean;
   disabled: boolean;
   priceItems: PriceItem[];
+  dnd: Dnd;
   onPatch: (id: string, patch: Partial<RowState>) => void;
   onSave: (id: string) => void;
   onDelete: (id: string) => Promise<{ ok: boolean; message: string }>;
@@ -419,6 +646,7 @@ function NivelSection({
   const [open, setOpen] = useState(true);
   const budget = rows.reduce((s, r) => s + r.totalBudgeted, 0);
   const paid = rows.reduce((s, r) => s + r.paid, 0);
+  const nivelKey = nivel ?? SIN_NIVEL;
 
   const byCat = useMemo(() => {
     const map = new Map<string, RowState[]>();
@@ -429,14 +657,20 @@ function NivelSection({
       map.set(k, list);
     }
     const catName = new Map(cats.map((c) => [c.id, c.name]));
-    const order = [...cats.map((c) => c.id), SIN_CATEGORIA];
-    return order
-      .filter((id) => map.has(id))
-      .map((id) => ({
-        categoryId: id === SIN_CATEGORIA ? null : id,
-        name: id === SIN_CATEGORIA ? "Sin categoría" : catName.get(id) ?? "Sin categoría",
-        rows: map.get(id)!,
-      }));
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const k = r.categoryId ?? SIN_CATEGORIA;
+      if (!seen.has(k)) {
+        seen.add(k);
+        order.push(k);
+      }
+    }
+    return order.map((id) => ({
+      categoryId: id === SIN_CATEGORIA ? null : id,
+      name: id === SIN_CATEGORIA ? "Sin categoría" : catName.get(id) ?? "Sin categoría",
+      rows: map.get(id)!,
+    }));
   }, [rows, cats]);
 
   const categoryCards = (
@@ -452,6 +686,7 @@ function NivelSection({
           subcatOptions={subcats.filter((s) => s.categoryId === group.categoryId)}
           disabled={disabled}
           priceItems={priceItems}
+          dnd={dnd}
           onPatch={onPatch}
           onSave={onSave}
           onDelete={onDelete}
@@ -466,25 +701,40 @@ function NivelSection({
 
   if (!showHeader) return categoryCards;
 
+  const active = isDropActive("nivel", "", nivelKey, dnd);
+
   return (
-    <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-2 py-1 text-left"
+    <div
+      className={cn(
+        "rounded-2xl border border-border/70 bg-muted/20 p-3 transition-opacity",
+        isDragging("nivel", nivelKey, dnd) && "opacity-50",
+      )}
+    >
+      <div
+        data-nivel-head
+        {...dropHandlers("nivel", "", nivelKey, dnd)}
+        className={cn(
+          "flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 transition-colors",
+          active && "bg-primary/10 ring-2 ring-inset ring-primary",
+        )}
       >
-        <span className="flex items-center gap-2 font-heading text-base font-semibold">
+        <DragHandle level="nivel" scope="" dataKey={nivelKey} dnd={dnd} dragImageSelector="[data-nivel-head]" />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex flex-1 items-center gap-2 text-left font-heading text-base font-semibold hover:opacity-80"
+        >
           <ChevronDownIcon className={cn("size-4 transition-transform", !open && "-rotate-90")} />
           {name}
           <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
             Nivel
           </span>
-        </span>
+        </button>
         <span className="flex flex-wrap items-center gap-x-4 text-xs text-muted-foreground">
           <span>Presup. <span className="font-mono text-foreground">{formatCurrency(budget)}</span></span>
           <span>Gastado <span className="font-mono text-foreground">{formatCurrency(paid)}</span></span>
         </span>
-      </button>
+      </div>
       {open && categoryCards}
     </div>
   );
@@ -499,6 +749,7 @@ function CategorySection({
   subcatOptions,
   disabled,
   priceItems,
+  dnd,
   onPatch,
   onSave,
   onDelete,
@@ -515,6 +766,7 @@ function CategorySection({
   subcatOptions: Subcategory[];
   disabled: boolean;
   priceItems: PriceItem[];
+  dnd: Dnd;
   onPatch: (id: string, patch: Partial<RowState>) => void;
   onSave: (id: string) => void;
   onDelete: (id: string) => Promise<{ ok: boolean; message: string }>;
@@ -528,6 +780,11 @@ function CategorySection({
   const paid = rows.reduce((s, r) => s + r.paid, 0);
   const remaining = budget - paid;
 
+  const nivelKey = nivel ?? SIN_NIVEL;
+  const catKey = categoryId ?? SIN_CATEGORIA;
+  const catScope = nivelKey;
+  const subScope = `${nivelKey}${SEP}${catKey}`;
+
   // Sub-grupos por subcategoría.
   const subgroups = useMemo(() => {
     const map = new Map<string, RowState[]>();
@@ -537,14 +794,21 @@ function CategorySection({
       list.push(r);
       map.set(k, list);
     }
-    const order = [...subcatOptions.map((s) => s.id), SIN_SUBCATEGORIA];
-    return order
-      .filter((id) => map.has(id))
-      .map((id) => ({
-        subId: id === SIN_SUBCATEGORIA ? null : id,
-        name: id === SIN_SUBCATEGORIA ? "Sin subcategoría" : subcatOptions.find((s) => s.id === id)?.name ?? "",
-        rows: map.get(id)!,
-      }));
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const k = r.subcategoryId ?? SIN_SUBCATEGORIA;
+      if (!seen.has(k)) {
+        seen.add(k);
+        order.push(k);
+      }
+    }
+    return order.map((id) => ({
+      subId: id === SIN_SUBCATEGORIA ? null : id,
+      subKey: id,
+      name: id === SIN_SUBCATEGORIA ? "Sin subcategoría" : subcatOptions.find((s) => s.id === id)?.name ?? "",
+      rows: map.get(id)!,
+    }));
   }, [rows, subcatOptions]);
 
   const showSubHeaders = subgroups.length > 1 || (subgroups.length === 1 && subgroups[0].subId !== null);
@@ -553,9 +817,24 @@ function CategorySection({
     ...subcatOptions.map((s) => ({ value: s.id, label: s.name })),
   ];
 
+  const catActive = isDropActive("category", catScope, catKey, dnd);
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-card)]">
-      <div className="flex items-center justify-between gap-3 bg-muted/40 px-4 py-3">
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-card)] transition-opacity",
+        isDragging("category", catKey, dnd) && "opacity-50",
+      )}
+    >
+      <div
+        data-cat-head
+        {...dropHandlers("category", catScope, catKey, dnd)}
+        className={cn(
+          "flex items-center justify-between gap-2 bg-muted/40 px-3 py-3 transition-colors",
+          catActive && "bg-primary/10 ring-2 ring-inset ring-primary",
+        )}
+      >
+        <DragHandle level="category" scope={catScope} dataKey={catKey} dnd={dnd} dragImageSelector="[data-cat-head]" />
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -601,13 +880,26 @@ function CategorySection({
               {subgroups.map((g) => {
                 const subBudget = g.rows.reduce((s, r) => s + r.totalBudgeted, 0);
                 const subPaid = g.rows.reduce((s, r) => s + r.paid, 0);
+                const lineScope = `${nivelKey}${SEP}${catKey}${SEP}${g.subKey}`;
+                const subActive = isDropActive("subcategory", subScope, g.subKey, dnd);
                 return (
                   <Fragment key={g.subId ?? SIN_SUBCATEGORIA}>
                     {showSubHeaders && (
-                      <tr className="bg-muted/20 text-[13px]">
-                        <td colSpan={4} className="px-4 py-1.5 font-medium text-copper">
-                          {g.name}
+                      <tr
+                        {...dropHandlers("subcategory", subScope, g.subKey, dnd)}
+                        className={cn(
+                          "bg-muted/20 text-[13px] transition-colors",
+                          subActive && "bg-primary/10",
+                          isDragging("subcategory", g.subKey, dnd) && "opacity-50",
+                        )}
+                      >
+                        <td className="px-2 py-1.5">
+                          <div className="flex items-center gap-1">
+                            <DragHandle level="subcategory" scope={subScope} dataKey={g.subKey} dnd={dnd} dragImageSelector="tr" />
+                            <span className="font-medium text-copper">{g.name}</span>
+                          </div>
                         </td>
+                        <td colSpan={3} />
                         <td className="px-2 py-1.5 text-right font-mono tabular-nums font-medium">{formatCurrency(subBudget)}</td>
                         <td className="px-3 py-1.5 text-right font-mono tabular-nums text-muted-foreground">
                           {subPaid > 0 ? formatCurrency(subPaid) : "—"}
@@ -615,57 +907,69 @@ function CategorySection({
                         <td />
                       </tr>
                     )}
-                    {g.rows.map((row) => (
-                      <tr key={row.id} className="border-b border-border/40 hover:bg-muted/20">
-                        <td className="px-2 py-1">
-                          <CellInput value={row.description} onChange={(v) => onPatch(row.id, { description: v })} onBlur={() => onSave(row.id)} disabled={disabled} />
-                        </td>
-                        <td className="px-1 py-1">
-                          <CellInput type="number" align="right" value={row.quantity ?? ""} onChange={(v) => onPatch(row.id, { quantity: v === "" ? null : Number(v) })} onBlur={() => onSave(row.id)} disabled={disabled} />
-                        </td>
-                        <td className="px-1 py-1">
-                          <CellInput value={row.unit ?? ""} onChange={(v) => onPatch(row.id, { unit: v })} onBlur={() => onSave(row.id)} disabled={disabled} />
-                        </td>
-                        <td className="px-1 py-1">
-                          <CurrencyCell value={row.unitPrice ?? ""} onChange={(v) => onPatch(row.id, { unitPrice: v === "" ? null : Number(v) })} onBlur={() => onSave(row.id)} disabled={disabled} />
-                        </td>
-                        <td className="px-1 py-1">
-                          <CurrencyCell value={row.totalBudgeted} onChange={(v) => onPatch(row.id, { totalBudgeted: v === "" ? 0 : Number(v) })} onBlur={() => onSave(row.id)} disabled={disabled} strong />
-                        </td>
-                        <td className="px-3 py-1 text-right font-mono tabular-nums text-muted-foreground">
-                          {row.paid > 0 ? formatCurrency(row.paid) : "—"}
-                        </td>
-                        <td className="px-2 py-1">
-                          <div className="flex items-center justify-end gap-1">
-                            {subcatOptions.length > 0 && (
-                              <select
-                                value={row.subcategoryId ?? ""}
-                                disabled={disabled}
-                                onChange={(e) => onChangeSubcategory(row.id, e.target.value || null)}
-                                title="Mover a subcategoría"
-                                className="h-7 max-w-[120px] rounded-md border border-input bg-background px-1.5 text-[12px] text-muted-foreground outline-none focus:border-primary"
-                              >
-                                {moveOptions.map((o) => (
-                                  <option key={o.value || "none"} value={o.value}>
-                                    {o.label}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                            <ConfirmDialog
-                              title="Eliminar partida"
-                              description={`Se eliminará "${row.description || "esta partida"}" del presupuesto. Esta acción no se puede deshacer.`}
-                              trigger={
-                                <Button variant="ghost" size="icon-sm" disabled={disabled} title="Eliminar partida">
-                                  <Trash2Icon className="size-3.5" />
-                                </Button>
-                              }
-                              onConfirm={() => onDelete(row.id)}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {g.rows.map((row) => {
+                      const lineActive = isDropActive("line", lineScope, row.id, dnd);
+                      return (
+                        <tr
+                          key={row.id}
+                          {...dropHandlers("line", lineScope, row.id, dnd)}
+                          className={cn(
+                            "border-b border-border/40 transition-colors hover:bg-muted/20",
+                            lineActive && "bg-primary/10",
+                            isDragging("line", row.id, dnd) && "opacity-50",
+                          )}
+                        >
+                          <td className="px-2 py-1">
+                            <CellInput value={row.description} onChange={(v) => onPatch(row.id, { description: v })} onBlur={() => onSave(row.id)} disabled={disabled} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <CellInput type="number" align="right" value={row.quantity ?? ""} onChange={(v) => onPatch(row.id, { quantity: v === "" ? null : Number(v) })} onBlur={() => onSave(row.id)} disabled={disabled} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <CellInput value={row.unit ?? ""} onChange={(v) => onPatch(row.id, { unit: v })} onBlur={() => onSave(row.id)} disabled={disabled} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <CurrencyCell value={row.unitPrice ?? ""} onChange={(v) => onPatch(row.id, { unitPrice: v === "" ? null : Number(v) })} onBlur={() => onSave(row.id)} disabled={disabled} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <CurrencyCell value={row.totalBudgeted} onChange={(v) => onPatch(row.id, { totalBudgeted: v === "" ? 0 : Number(v) })} onBlur={() => onSave(row.id)} disabled={disabled} strong />
+                          </td>
+                          <td className="px-3 py-1 text-right font-mono tabular-nums text-muted-foreground">
+                            {row.paid > 0 ? formatCurrency(row.paid) : "—"}
+                          </td>
+                          <td className="px-2 py-1">
+                            <div className="flex items-center justify-end gap-1">
+                              <DragHandle level="line" scope={lineScope} dataKey={row.id} dnd={dnd} dragImageSelector="tr" />
+                              {subcatOptions.length > 0 && (
+                                <select
+                                  value={row.subcategoryId ?? ""}
+                                  disabled={disabled}
+                                  onChange={(e) => onChangeSubcategory(row.id, e.target.value || null)}
+                                  title="Mover a subcategoría"
+                                  className="h-7 max-w-[120px] rounded-md border border-input bg-background px-1.5 text-[12px] text-muted-foreground outline-none focus:border-primary"
+                                >
+                                  {moveOptions.map((o) => (
+                                    <option key={o.value || "none"} value={o.value}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                              <ConfirmDialog
+                                title="Eliminar partida"
+                                description={`Se eliminará "${row.description || "esta partida"}" del presupuesto. Esta acción no se puede deshacer.`}
+                                trigger={
+                                  <Button variant="ghost" size="icon-sm" disabled={disabled} title="Eliminar partida">
+                                    <Trash2Icon className="size-3.5" />
+                                  </Button>
+                                }
+                                onConfirm={() => onDelete(row.id)}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </Fragment>
                 );
               })}

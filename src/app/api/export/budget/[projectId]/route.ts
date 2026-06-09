@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { NextResponse } from "next/server";
 
+import { orderBudgetLinesForDisplay } from "@/features/finance/ledger";
 import { getAppData, getProjectOverview } from "@/features/finance/store";
 
 function fmtCurrency(value: number): string {
@@ -67,10 +68,12 @@ export async function GET(
     { content: fmtCurrency(b), styles },
   ];
 
-  // Orden de niveles por aparición.
+  // Orden de visualización idéntico al de la app (por sortOrder de las partidas).
+  const ordered = orderBudgetLinesForDisplay(budgetLines);
+
   const nivelOrder: (string | null)[] = [];
   const seenNivel = new Set<string>();
-  for (const l of budgetLines) {
+  for (const l of ordered) {
     const n = nivelOf(l.area);
     const key = n ?? "__none";
     if (!seenNivel.has(key)) {
@@ -78,8 +81,6 @@ export async function GET(
       nivelOrder.push(n);
     }
   }
-
-  const catOrder = [...data.categories.map((c) => c.id), "__nocat"];
 
   function renderCategory(catId: string | null, catLines: (typeof budgetLines)): number {
     tableBody.push([
@@ -92,10 +93,15 @@ export async function GET(
       if (!bySub.has(k)) bySub.set(k, []);
       bySub.get(k)!.push(l);
     }
-    const subOrder = [
-      ...data.subcategories.filter((s) => s.categoryId === catId).map((s) => s.id),
-      "__nosub",
-    ].filter((id) => bySub.has(id));
+    const subOrder: string[] = [];
+    const seenSub = new Set<string>();
+    for (const l of catLines) {
+      const k = l.subcategoryId ?? "__nosub";
+      if (!seenSub.has(k)) {
+        seenSub.add(k);
+        subOrder.push(k);
+      }
+    }
     const onlyNoSub = subOrder.length === 1 && subOrder[0] === "__nosub";
 
     let cb = 0;
@@ -123,7 +129,7 @@ export async function GET(
   let grandBudgeted = 0;
 
   for (const nivel of nivelOrder) {
-    const nivelLines = budgetLines.filter((l) => nivelOf(l.area) === nivel);
+    const nivelLines = ordered.filter((l) => nivelOf(l.area) === nivel);
     if (hasNiveles) {
       tableBody.push([
         {
@@ -145,8 +151,17 @@ export async function GET(
       if (!byCat.has(k)) byCat.set(k, []);
       byCat.get(k)!.push(l);
     }
+    const catKeyOrder: string[] = [];
+    const seenCat = new Set<string>();
+    for (const l of nivelLines) {
+      const k = l.categoryId ?? "__nocat";
+      if (!seenCat.has(k)) {
+        seenCat.add(k);
+        catKeyOrder.push(k);
+      }
+    }
     let nb = 0;
-    for (const catKey of catOrder.filter((id) => byCat.has(id))) {
+    for (const catKey of catKeyOrder) {
       nb += renderCategory(catKey === "__nocat" ? null : catKey, byCat.get(catKey)!);
     }
     if (hasNiveles) {

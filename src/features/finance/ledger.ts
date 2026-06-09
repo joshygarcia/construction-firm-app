@@ -1703,6 +1703,161 @@ export function deleteBudgetLines(data: AppData, ids: string[]): AppData {
   return next;
 }
 
+const NIVEL_NONE_KEY = " __nonivel__";
+function nivelKeyOf(line: BudgetLine): string {
+  return line.area && line.area.trim() ? line.area.trim() : NIVEL_NONE_KEY;
+}
+
+/**
+ * Orden de visualización de las partidas: nivel → categoría → subcategoría → sortOrder,
+ * donde cada grupo se ordena por el MENOR sortOrder de sus partidas. La app y el PDF
+ * usan esta misma función para mostrar/imprimir en idéntico orden.
+ */
+export function orderBudgetLinesForDisplay(lines: BudgetLine[]): BudgetLine[] {
+  const minBy = (keyFn: (l: BudgetLine) => string) => {
+    const m = new Map<string, number>();
+    for (const l of lines) {
+      const k = keyFn(l);
+      m.set(k, Math.min(m.get(k) ?? Number.POSITIVE_INFINITY, l.sortOrder));
+    }
+    return m;
+  };
+  const nKey = (l: BudgetLine) => nivelKeyOf(l);
+  const cKey = (l: BudgetLine) => `${nivelKeyOf(l)}|${l.categoryId ?? ""}`;
+  const sKey = (l: BudgetLine) => `${cKey(l)}|${l.subcategoryId ?? ""}`;
+  const nMin = minBy(nKey);
+  const cMin = minBy(cKey);
+  const sMin = minBy(sKey);
+  return [...lines].sort((a, b) => {
+    const na = nMin.get(nKey(a)) ?? 0;
+    const nb = nMin.get(nKey(b)) ?? 0;
+    if (na !== nb) return na - nb;
+    const ca = cMin.get(cKey(a)) ?? 0;
+    const cb = cMin.get(cKey(b)) ?? 0;
+    if (ca !== cb) return ca - cb;
+    const sa = sMin.get(sKey(a)) ?? 0;
+    const sb = sMin.get(sKey(b)) ?? 0;
+    if (sa !== sb) return sa - sb;
+    return a.sortOrder - b.sortOrder;
+  });
+}
+
+export type BudgetMoveLevel = "nivel" | "category" | "subcategory" | "line";
+export type BudgetMoveTarget = {
+  area?: string | null;
+  categoryId?: string | null;
+  subcategoryId?: string | null;
+  lineId?: string | null;
+};
+
+/**
+ * Mueve un grupo (nivel/categoría/subcategoría) o una partida hacia arriba/abajo
+ * entre sus hermanos, renumerando el sortOrder de todas las partidas del proyecto.
+ */
+export function moveBudgetItem(
+  data: AppData,
+  projectId: string,
+  level: BudgetMoveLevel,
+  target: BudgetMoveTarget,
+  direction: "up" | "down",
+): AppData {
+  const next = structuredClone(data);
+  const projectLines = next.budgetLines.filter((l) => l.projectId === projectId);
+  const ordered = orderBudgetLinesForDisplay(projectLines);
+  if (ordered.length === 0) return next;
+
+  const nk = (l: BudgetLine) => nivelKeyOf(l);
+  const ck = (l: BudgetLine) => `${nk(l)}|${l.categoryId ?? ""}`;
+  const sk = (l: BudgetLine) => `${ck(l)}|${l.subcategoryId ?? ""}`;
+
+  const keyOf = (l: BudgetLine) =>
+    level === "nivel" ? nk(l) : level === "category" ? ck(l) : level === "subcategory" ? sk(l) : l.id;
+  const parentOf = (l: BudgetLine) =>
+    level === "nivel" ? "" : level === "category" ? nk(l) : level === "subcategory" ? ck(l) : sk(l);
+
+  const targetAreaKey = target.area && target.area.trim() ? target.area.trim() : NIVEL_NONE_KEY;
+  let targetKey: string;
+  if (level === "nivel") targetKey = targetAreaKey;
+  else if (level === "category") targetKey = `${targetAreaKey}|${target.categoryId ?? ""}`;
+  else if (level === "subcategory")
+    targetKey = `${targetAreaKey}|${target.categoryId ?? ""}|${target.subcategoryId ?? ""}`;
+  else targetKey = target.lineId ?? "";
+
+  const targetLines = ordered.filter((l) => keyOf(l) === targetKey);
+  if (targetLines.length === 0) return next;
+  const parent = parentOf(targetLines[0]);
+
+  const siblingKeys: string[] = [];
+  for (const l of ordered) {
+    if (parentOf(l) !== parent) continue;
+    const k = keyOf(l);
+    if (!siblingKeys.includes(k)) siblingKeys.push(k);
+  }
+  const idx = siblingKeys.indexOf(targetKey);
+  const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= siblingKeys.length) return next;
+  [siblingKeys[idx], siblingKeys[swapIdx]] = [siblingKeys[swapIdx], siblingKeys[idx]];
+
+  const linesByKey = new Map<string, BudgetLine[]>();
+  for (const l of ordered) {
+    if (parentOf(l) !== parent) continue;
+    const k = keyOf(l);
+    if (!linesByKey.has(k)) linesByKey.set(k, []);
+    linesByKey.get(k)!.push(l);
+  }
+  const reorderedParent: BudgetLine[] = [];
+  for (const k of siblingKeys) reorderedParent.push(...(linesByKey.get(k) ?? []));
+
+  const parentIds = new Set(reorderedParent.map((l) => l.id));
+  const finalFlat: BudgetLine[] = [];
+  let inserted = false;
+  for (const l of ordered) {
+    if (parentIds.has(l.id)) {
+      if (!inserted) {
+        finalFlat.push(...reorderedParent);
+        inserted = true;
+      }
+    } else {
+      finalFlat.push(l);
+    }
+  }
+
+  finalFlat.forEach((l, i) => {
+    const line = next.budgetLines.find((b) => b.id === l.id);
+    if (line) line.sortOrder = i + 1;
+  });
+
+  return next;
+}
+
+/**
+ * Reordena TODAS las partidas del proyecto según el orden plano de ids dado
+ * (ya contiguo por nivel → categoría → subcategoría → partida). Renumera el
+ * sortOrder por posición. Lo usa el drag & drop, que entrega el orden completo
+ * resultante. Las partidas que no aparezcan en la lista quedan al final,
+ * conservando su orden relativo.
+ */
+export function reorderBudgetLines(
+  data: AppData,
+  projectId: string,
+  orderedIds: string[],
+): AppData {
+  const next = structuredClone(data);
+  const indexById = new Map(orderedIds.map((id, i) => [id, i]));
+  let tail = orderedIds.length;
+  const ranked = next.budgetLines
+    .filter((l) => l.projectId === projectId)
+    .map((line) => {
+      const idx = indexById.get(line.id);
+      return { line, order: idx === undefined ? tail++ : idx };
+    });
+  ranked.sort((a, b) => a.order - b.order);
+  ranked.forEach((entry, i) => {
+    entry.line.sortOrder = i + 1;
+  });
+  return next;
+}
+
 /** Elimina TODO el presupuesto de un proyecto. */
 export function clearProjectBudget(data: AppData, projectId: string): AppData {
   const next = structuredClone(data);

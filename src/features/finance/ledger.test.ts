@@ -1,4 +1,8 @@
 import {
+  orderBudgetLinesForDisplay,
+  moveBudgetItem,
+  reorderBudgetLines,
+  type BudgetLine,
   createBudgetLine,
   createCard,
   createCardPayment,
@@ -418,6 +422,94 @@ describe("préstamos recibidos", () => {
     });
     expect(deriveLoanBalances(repaid)[0].balance).toBe(70000);
     expect(deriveCompanyFinance(repaid).cash).toBe(cashBase + 100000 - 30000);
+  });
+});
+
+describe("orden y reordenamiento del presupuesto", () => {
+  function makeLine(
+    id: string,
+    area: string,
+    categoryId: string,
+    subcategoryId: string | null,
+    sortOrder: number,
+  ): BudgetLine {
+    return {
+      id,
+      budgetVersionId: "budget-version-1",
+      projectId: "project-1",
+      sectionId: null,
+      categoryId,
+      subcategoryId,
+      phase: null,
+      area,
+      lineCode: null,
+      description: id,
+      quantity: 1,
+      unit: "u",
+      unitPrice: 100,
+      totalBudgeted: 100,
+      notes: "",
+      sortOrder,
+      isManualTotal: false,
+    };
+  }
+
+  function fixtureWithLines() {
+    const data = buildFixture();
+    data.budgetLines = [
+      makeLine("L1", "NIVEL N1", "cat-plomeria", null, 1),
+      makeLine("L2", "NIVEL N1", "cat-plomeria", "sub-plomero", 2),
+      makeLine("L3", "NIVEL N1", "cat-solar", null, 3),
+      makeLine("L4", "NIVEL N2", "cat-plomeria", null, 4),
+    ];
+    return data;
+  }
+
+  const ids = (data: AppData) =>
+    orderBudgetLinesForDisplay(data.budgetLines).map((l) => l.id);
+
+  it("ordena por nivel → categoría → subcategoría → sortOrder", () => {
+    expect(ids(fixtureWithLines())).toEqual(["L1", "L2", "L3", "L4"]);
+  });
+
+  it("mueve un nivel hacia abajo (intercambia bloques completos)", () => {
+    const moved = moveBudgetItem(fixtureWithLines(), "project-1", "nivel", { area: "NIVEL N1" }, "down");
+    expect(ids(moved)).toEqual(["L4", "L1", "L2", "L3"]);
+  });
+
+  it("mueve una subcategoría dentro de su categoría", () => {
+    // En cat-plomeria de N1: [sin sub (L1)] luego [sub-plomero (L2)]; subir la subcategoría sub-plomero.
+    const moved = moveBudgetItem(
+      fixtureWithLines(),
+      "project-1",
+      "subcategory",
+      { area: "NIVEL N1", categoryId: "cat-plomeria", subcategoryId: "sub-plomero" },
+      "up",
+    );
+    expect(ids(moved)).toEqual(["L2", "L1", "L3", "L4"]);
+  });
+
+  it("mueve una partida dentro de su subcategoría", () => {
+    const data = fixtureWithLines();
+    // Dos partidas en N1/cat-solar/sin sub.
+    data.budgetLines.push(makeLine("L5", "NIVEL N1", "cat-solar", null, 5));
+    const moved = moveBudgetItem(data, "project-1", "line", { lineId: "L5" }, "up");
+    const order = orderBudgetLinesForDisplay(moved.budgetLines).map((l) => l.id);
+    // L5 debe quedar antes de L3 dentro de cat-solar.
+    expect(order.indexOf("L5")).toBeLessThan(order.indexOf("L3"));
+  });
+
+  it("reorderBudgetLines aplica el orden plano dado (drag & drop)", () => {
+    const moved = reorderBudgetLines(fixtureWithLines(), "project-1", ["L4", "L1", "L2", "L3"]);
+    expect(ids(moved)).toEqual(["L4", "L1", "L2", "L3"]);
+  });
+
+  it("reorderBudgetLines deja al final las partidas no incluidas", () => {
+    const moved = reorderBudgetLines(fixtureWithLines(), "project-1", ["L3"]);
+    const order = ids(moved);
+    expect(order[0]).toBe("L3");
+    expect(order).toHaveLength(4);
+    expect(order).toContain("L1");
   });
 });
 

@@ -1,5 +1,6 @@
-import { QuickEntryPanel } from "@/features/finance/components/quick-entry-panel";
 import { PageHeader } from "@/components/shared/page-header";
+import { RegistrarForm } from "@/features/finance/components/registrar-form";
+import { orderBudgetLinesForDisplay } from "@/features/finance/ledger";
 import { getReferenceData } from "@/features/finance/store";
 
 type Mode = "expense" | "income" | "contractor_payment";
@@ -19,7 +20,54 @@ export default async function RegistrarPage({
   ).includes(tipoRaw as Mode)
     ? (tipoRaw as Mode)
     : "expense";
+
   const reference = getReferenceData();
+
+  const budgetLines = orderBudgetLinesForDisplay(
+    reference.budgetLines.filter((line) => line.projectId === projectId),
+  ).map((line) => ({
+    id: line.id,
+    categoryId: line.categoryId,
+    subcategoryId: line.subcategoryId,
+    description: line.description,
+    unit: line.unit,
+    unitPrice: line.unitPrice,
+  }));
+
+  const categories = [...reference.categories]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((c) => ({ id: c.id, name: c.name }));
+
+  const subcategories = reference.subcategories.map((s) => ({
+    id: s.id,
+    categoryId: s.categoryId,
+    name: s.name,
+  }));
+
+  const contracts = reference.contracts
+    .filter((contract) => contract.projectId === projectId)
+    .map((contract) => ({
+      id: contract.id,
+      contractorId: contract.contractorId,
+      scopeDescription: contract.scopeDescription,
+    }));
+
+  const contractors = reference.contractors.map((c) => ({
+    id: c.id,
+    fullName: c.fullName,
+  }));
+
+  const cards = reference.cards
+    .filter((card) => card.isActive)
+    .map((card) => ({ id: card.id, name: card.name }));
+
+  const counterparties = reference.suggestionOptions
+    .filter((option) => option.kind === "counterparty")
+    .map((option) => option.value);
+
+  const paymentMethods = reference.suggestionOptions
+    .filter((option) => option.kind === "payment_method")
+    .map((option) => option.value);
 
   return (
     <>
@@ -29,23 +77,17 @@ export default async function RegistrarPage({
         title="Registrar un movimiento"
       />
       <div className="px-4 py-6 md:px-8">
-        <QuickEntryPanel
-          availableModes={["expense", "income", "contractor_payment"]}
-          budgetLines={reference.budgetLines}
-          budgetRows={reference.budgetRows}
-          budgetVersions={reference.budgetVersions}
-          cards={reference.cards}
-          categories={reference.categories}
-          contractorBalances={reference.contractorBalances}
-          contractors={reference.contractors}
-          contracts={reference.contracts}
+        <RegistrarForm
+          budgetLines={budgetLines}
+          cards={cards}
+          categories={categories}
+          contractors={contractors}
+          contracts={contracts}
+          counterparties={counterparties}
           defaultMode={defaultMode}
-          defaultProjectId={projectId}
-          projectSummaries={reference.projectSummaries}
-          projects={reference.projects.filter((p) => p.id === projectId)}
-          showImpact={false}
-          subcategories={reference.subcategories}
-          suggestionOptions={reference.suggestionOptions}
+          paymentMethods={paymentMethods}
+          projectId={projectId}
+          subcategories={subcategories}
         />
       </div>
     </>

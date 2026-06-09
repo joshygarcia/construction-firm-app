@@ -36,6 +36,24 @@ export default async function ProjectTransactionsPage({
   const months = [...new Set(snapshot.transactions.map((item) => item.transactionDate.slice(0, 7)))];
   const activeMonth = getParam(search.month);
 
+  const categories = [...snapshot.reference.categories]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((c) => ({ id: c.id, name: c.name }));
+  const subcategories = snapshot.reference.subcategories.map((s) => ({
+    id: s.id,
+    categoryId: s.categoryId,
+    name: s.name,
+  }));
+  const cards = snapshot.reference.cards
+    .filter((card) => card.isActive)
+    .map((card) => ({ id: card.id, name: card.name }));
+  const counterparties = snapshot.reference.suggestionOptions
+    .filter((option) => option.kind === "counterparty")
+    .map((option) => option.value);
+  const paymentMethods = snapshot.reference.suggestionOptions
+    .filter((option) => option.kind === "payment_method")
+    .map((option) => option.value);
+
   return (
     <>
       <PageHeader
@@ -84,7 +102,14 @@ export default async function ProjectTransactionsPage({
             <CardTitle>Historial</CardTitle>
           </CardHeader>
           <CardContent>
-            <TransactionsTable transactions={snapshot.transactions} />
+            <TransactionsTable
+              transactions={snapshot.transactions}
+              categories={categories}
+              subcategories={subcategories}
+              cards={cards}
+              counterparties={counterparties}
+              paymentMethods={paymentMethods}
+            />
           </CardContent>
         </Card>
 

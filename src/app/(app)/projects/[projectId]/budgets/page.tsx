@@ -2,6 +2,7 @@ import { ExportButtons } from "@/components/shared/export-buttons";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { BudgetGrid } from "@/features/finance/components/budget-grid";
+import { orderBudgetLinesForDisplay } from "@/features/finance/ledger";
 import { getProjectOverview, getReferenceData } from "@/features/finance/store";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ export default async function ProjectBudgetsPage({
     overview.budgetAdvances.map((a) => [a.budgetLineId, a.totalPaid]),
   );
 
-  const lines = overview.budgetLines.map((l) => ({
+  const lines = orderBudgetLinesForDisplay(overview.budgetLines).map((l) => ({
     id: l.id,
     categoryId: l.categoryId,
     subcategoryId: l.subcategoryId,
@@ -34,6 +35,7 @@ export default async function ProjectBudgetsPage({
     unitPrice: l.unitPrice,
     totalBudgeted: l.totalBudgeted,
     isManualTotal: l.isManualTotal,
+    sortOrder: l.sortOrder,
     paid: advanceMap.get(l.id) ?? 0,
   }));
 

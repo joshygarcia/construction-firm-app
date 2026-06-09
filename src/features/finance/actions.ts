@@ -74,6 +74,8 @@ import {
   removeBudgetLine,
   removeBudgetLines,
   clearBudget,
+  moveBudgetItem,
+  reorderBudgetLines,
   removeBudgetSection,
   removeBudgetVersion,
   removeContractor,
@@ -580,6 +582,44 @@ export async function submitDeleteBudgetLines(ids: string[]): Promise<ActionResu
     return { ok: true, message: "Categoría eliminada del presupuesto." };
   } catch (error) {
     return invalidResult(error instanceof Error ? error.message : "No se pudo eliminar la categoría.");
+  }
+}
+
+export async function submitMoveBudgetItem(
+  projectId: string,
+  level: "nivel" | "category" | "subcategory" | "line",
+  target: {
+    area?: string | null;
+    categoryId?: string | null;
+    subcategoryId?: string | null;
+    lineId?: string | null;
+  },
+  direction: "up" | "down",
+): Promise<ActionResult> {
+  try {
+    if (!projectId) return invalidResult("Proyecto requerido.");
+    moveBudgetItem(projectId, level, target, direction);
+    refresh();
+    return { ok: true, message: "Orden actualizado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo reordenar.");
+  }
+}
+
+export async function submitReorderBudgetLines(
+  projectId: string,
+  orderedIds: string[],
+): Promise<ActionResult> {
+  try {
+    if (!projectId) return invalidResult("Proyecto requerido.");
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return invalidResult("Orden inválido.");
+    }
+    reorderBudgetLines(projectId, orderedIds);
+    refresh();
+    return { ok: true, message: "Orden actualizado." };
+  } catch (error) {
+    return invalidResult(error instanceof Error ? error.message : "No se pudo reordenar.");
   }
 }
 
